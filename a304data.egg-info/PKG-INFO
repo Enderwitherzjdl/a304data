@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: a304data
+Version: 0.1.0
+Summary: Tools for processing A304 lab experimental data
+Author: Enderwitherzjdl
+Requires-Python: >=3.8
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: matplotlib

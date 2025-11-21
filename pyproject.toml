@@ -1,0 +1,11 @@
+[project]
+name = "a304data"
+version = "0.1.0"
+description = "Tools for processing A304 lab experimental data"
+authors = [{ name="Enderwitherzjdl" }]
+requires-python = ">=3.8"
+dependencies = ["numpy", "pandas", "matplotlib", "scipy"]  # 根据需要改写
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
