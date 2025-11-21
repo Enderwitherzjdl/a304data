@@ -1,7 +1,21 @@
 
 # A304Data 包
 
-包含工具1：PPLoopDataset 数据处理工具
+## 安装
+
+推荐使用开发模式安装，这样可以在本地修改代码后立即生效：
+
+```bash
+# 克隆仓库
+git clone git@github.com:Enderwitherzjdl/a304data.git
+cd a304data
+
+# 安装包（开发模式）
+pip install -e .
+```
+
+
+## 工具1：PPLoopDataset 数据处理工具（还没更新）
 
 本工具用于处理泵浦-探测（Pump-Probe, PP）实验中多圈重复测量数据（loop data），提供：
 - **单圈数据读取**
@@ -10,46 +24,42 @@
 - **延时/波长方向快速绘图**
 - **坏点跳点清洗**
 
-适用于实验室中常见的 LabVIEW 输出格式（如 `*_loop.dat` 与系统生成的 `averaged.dat`），也支持自行保存的平均数据。
+适用于 A304 中测试电脑的 LabVIEW 程序保存的数据格式（如 `yymmdd_hhmmss_loop{num}.dat` 与系统生成的 `yymmdd_hhmmss_averaged.dat`），也支持本程序包保存的平均数据。
 
 ---
 
-## 🔧 基本使用流程
+### 🔧 基本使用流程
 
 ```python
 from a304data import PPLoopDataset
 
-ds = PPLoopDataset(folder="./data", wl_min=450, wl_max=750)
+ds = PPLoopDataset(folder='.', wl_min=450, wl_max=750)
 ````
+
+请保证目录下有且仅有**一套数据**，其中包含**若干圈的原始数据**以及**不超过一个自动保存的平均值数据**。
 
 初始化完成后会自动：
 
-* 读取所有 `*_loop` 数据作为原始数据
+* 读取所有 `yymmdd_hhmmss_loop{num}.dat` 数据作为原始数据
 * 检查是否存在 `saved_averaged.dat` 或原始 LabVIEW 平均结果
 * 若存在已保存平均值，则自动载入，并读取 `saved_info.dat` 中的平均信息
 
 ---
 
-## 📁 文件结构说明
+### 📁 文件结构说明
 
-| 文件                   | 含义                              |
-| -------------------- | ------------------------------- |
-| `*_loop.dat`         | 单圈数据文件（每次扫描一圈）                  |
-| `saved_averaged.dat` | **你手动保存的平均数据**                  |
-| `saved_info.dat`     | 保存平均使用的 loop 信息（json 格式）        |
-| `averaged.dat`       | LabVIEW 自动生成的平均数据（若存在且唯一，会自动识别） |
-
-若目录中没有平均文件，会提示：
-
-```
-Averaged file not found.
-```
+| 文件                          | 含义                                                   |
+| ----------------------------- | ------------------------------------------------------ |
+| `yymmdd_hhmmss_loop{num}.dat` | 单圈数据文件（每次扫描一圈）                           |
+| `saved_averaged.dat`          | **你手动保存的平均数据**                               |
+| `saved_info.dat`              | 保存平均使用的 loop 信息（json 格式）                  |
+| `yymmdd_hhmmss_averaged.dat`  | LabVIEW 自动生成的平均数据（若存在且唯一，会自动识别） |
 
 ---
 
-## 📊 可视化方法
+### 📊 可视化方法
 
-### 1. 按延时绘图
+#### 1. 按延时绘图
 
 ```python
 ds.plot_at_delay(2.5, [1, 3, 'avg'])   # 画第1圈、第3圈 和平均曲线
@@ -57,7 +67,7 @@ ds.plot_at_delay(2.5, 'avg')           # 仅画平均
 ds.plot_at_delay(2.5, range(1,5))      # 画1~4圈
 ```
 
-### 2. 按波长绘图
+#### 2. 按波长绘图
 
 ```python
 ds.plot_at_wavelength(600, ['avg'])
@@ -66,16 +76,16 @@ ds.plot_at_wavelength(600, [1, 2, 5])
 
 ---
 
-## 🧮 计算并保存平均数据
+### 🧮 计算并保存平均数据
 
-### 计算平均
+#### 计算平均
 
 ```python
 ds.calculate_averaged_data(4)     # 取前4圈平均
 ds.calculate_averaged_data([1,3,5])  # 自定义圈编号
 ```
 
-### 保存数据
+#### 保存数据
 
 ```python
 ds.save_averaged_data()
@@ -90,7 +100,7 @@ saved_info.dat       # 包含 averaged_loop_num 和 averaged_loops
 
 ---
 
-## 🩺 数据清洗
+### 🩺 数据清洗
 
 用于修复部分扫描受触发错误导致的跳点：
 
@@ -103,7 +113,7 @@ ds.clean_jump_points(ref_wl=500, threshold=0.02)
 
 ---
 
-## ⚙️ 类结构参考
+### ⚙️ 类结构参考
 
 ```python
 class PPLoopDataset:
@@ -118,8 +128,37 @@ class PPLoopDataset:
 
 ---
 
-## 📌 备注
+### 📌 备注
 
 * 本工具默认假设所有 loop 数据具有相同的延时点和波长点分布
 * 平均数据会自动与原始数据对齐
 * 优先使用 `saved_averaged.dat`，仅当不存在时才会读取 LabVIEW 自带 averaged 文件
+
+
+
+## 工具2：UVVisDataset 数据处理工具
+
+本工具用于处理泵浦-探测（Pump-Probe, PP）实验中多圈重复测量数据（loop data），提供：
+
+- **UVVis数据读取**
+- **吸光度计算**
+- **寻峰**
+- **绘图并标峰**
+
+适用于实验室中常见的 LabVIEW 输出格式（如 `*_loop.dat` 与系统生成的 `averaged.dat`），也支持自行保存的平均数据。
+
+---
+
+### 🔧 基本使用流程
+
+```python
+from a304data import UVVisDataset
+
+DLamp = UVVisDataset('DLamp')
+DLamp.calculate_absorbance()
+DLamp.find_peak(height=0.6, prominence=0.1)
+DLamp.plot_uvvis()
+```
+
+程序只会读入文件名包含 `FX2000_FX2K243001` 的数据文件。其中命名包含了`bg`或`background`的将被视为背景文件，其他文件视为光谱文件。请保证一个目录下**有且仅有一个背景文件**，以及**若干光谱文件**。
+
