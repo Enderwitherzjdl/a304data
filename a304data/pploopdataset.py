@@ -83,14 +83,15 @@ class PPLoopDataset:
     - 可以按照波长、按照延时、按照圈数绘图。【二维热图开发中】
     - 关键字 savefig=True 可以保存图片。
     """
-    def __init__(self, folder, wl_min, wl_max):
+    def __init__(self, folder, wl_min, wl_max, read_averaged_only=False):
         self.folder = folder
         self.wl_min = wl_min
         self.wl_max = wl_max
         self.info_mgr = PPInfoManager(folder)
         # 加载数据
         self.data = []
-        self._load_original_data()
+        if read_averaged_only == False:
+            self._load_original_data()
         self._load_averaged_data()
         # 获取数据集基本信息
         self.delays = self.data[0].index.values

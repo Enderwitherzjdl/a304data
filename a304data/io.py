@@ -19,7 +19,11 @@ def load_pp_loop(filename, wl_min=450, wl_max=750):
     data.columns = pd.to_numeric(data.columns, errors='coerce')
     wl_max_clipped = min(wl_max, data.columns.max()) # 如果 wl_max 和 wl_min 超过数据范围会报错
     wl_min_clipped = max(wl_min, data.columns.min()) # 所以要限制一下
-    return data.loc[:, wl_max_clipped:wl_min_clipped]
+    ### 关于数据格式：可见的部分是波长从大到小排，近红外的是从小到大排
+    if wl_max < 800: # 判定为可见
+        return data.loc[:, wl_max_clipped:wl_min_clipped]
+    else:            # 判定为近红外
+        return data.loc[:, wl_min_clipped:wl_max_clipped]
 
 def load_uvvis_data(filename):
     """
