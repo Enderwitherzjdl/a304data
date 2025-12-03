@@ -163,6 +163,8 @@ class UVVisDataset:
         绘制背景数据的工作曲线。
 
         Args:
+            wl_min (float | None): x 轴最小波长。
+            wl_max (float | None): x 轴最大波长。
             savefig (bool): 是否保存图像文件。
         """
         if wl_min is None: wl_min = self.bg_data['Wavelength'].min()
