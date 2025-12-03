@@ -157,3 +157,22 @@ class UVVisDataset:
         if savefig:
             plt.savefig(os.path.join(self.folder, 'uvvis_spectrum.png'))
         plt.show()
+
+    def plot_background(self, wl_min=None, wl_max=None, savefig=False):
+        """
+        绘制背景数据的工作曲线。
+
+        Args:
+            savefig (bool): 是否保存图像文件。
+        """
+        if wl_min is None: wl_min = self.bg_data['Wavelength'].min()
+        if wl_max is None: wl_max = self.bg_data['Wavelength'].max()
+        plt.plot(self.bg_data['Wavelength'], self.bg_data['Work'])
+        plt.xlim(wl_min, wl_max)
+        plt.xlabel('Wavelength (nm)', fontsize=14)
+        plt.ylabel('Work', fontsize=14)
+        plt.title('Background', fontsize=14)
+        if savefig:
+            plt.savefig(os.path.join(self.folder, 'background_work_curve.png'))
+        plt.show()
+        
