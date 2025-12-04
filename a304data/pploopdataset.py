@@ -377,7 +377,8 @@ class PPLoopDataset:
                 curr_val = self.data[id].iloc[i][wl]
                 prev_val = self.data[id].iloc[i-1][wl]
                 next_val = self.data[id].iloc[i+1][wl]
-                if abs(curr_val-prev_val) > threshold and abs(curr_val-next_val) > threshold:
+                if curr_val-prev_val > threshold and curr_val-next_val > threshold:  # 跳点似乎都是变大。如果采用绝对值检测，会导致相邻三个点跳了两个的情况出问题
+                # if abs(curr_val-prev_val) > threshold and abs(curr_val-next_val) > threshold:
                     data_clean.iloc[i] = (self.data[id].iloc[i-1]+self.data[id].iloc[i+1])/2
                     print(f'Clean jump point in loop {id+1} at {self.delays[i]} ps')
             self.data[id] = data_clean
