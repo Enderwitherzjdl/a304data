@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
+from scipy.signal import find_peaks
 from typing import Literal
 from .io import load_pp_loop
 from .utils import get_closest_value
@@ -94,8 +95,12 @@ class PPLoopDataset:
             self._load_original_data()
         self._load_averaged_data()
         # 获取数据集基本信息
-        self.delays = self.data[0].index.values
-        self.wavelengths = self.data[0].columns.values
+        if self.data:
+            self.delays = self.data[0].index.values
+            self.wavelengths = self.data[0].columns.values
+        else:
+            self.delays = self.avg_data.index.values
+            self.wavelengths = self.avg_data.columns.values
 
     ########## Load Data ##########
     def _check_saved_averaged_file(self):
@@ -129,8 +134,7 @@ class PPLoopDataset:
         读取平均值数据及其信息。
 
         优先通过 _check_saved_averaged_file() 获取文件名。
-        若存在 saved_info.dat 文件，则加载其中的平均圈数信息；
-        否则使用当前已加载的圈数作为平均信息。
+        若存在 saved_info.dat 文件，则加载其中的平均圈数信息.
 
         Returns:
             bool: 若未找到平均值文件返回 False，否则返回 None。
@@ -142,8 +146,8 @@ class PPLoopDataset:
         avg_path = os.path.join(self.folder, avg_file)
         self.avg_data = load_pp_loop(avg_path, self.wl_min, self.wl_max)
 
-        self.averaged_loop_num = self.info_mgr.get("data", "averaged_loop_num", self.loop_num)
-        self.averaged_loops = self.info_mgr.get("data", "averaged_loops", list(range(1, self.loop_num+1)))
+        self.averaged_loop_num = self.info_mgr.get("data", "averaged_loop_num")
+        self.averaged_loops = self.info_mgr.get("data", "averaged_loops",)
         self.chirp_corrected = self.info_mgr.get("chirp", "corrected", False)
 
         print(f'Load averaged file from {avg_path}')
@@ -187,7 +191,7 @@ class PPLoopDataset:
         在指定延时处绘制信号曲线。
 
         Args:
-            delay (float): 指定延时（单位 ps），将自动匹配到最接近值。
+            delay (float | list | tuple): 指定延时（单位 ps），将自动匹配到最接近值。
             plot_list (int | str | list | tuple): 指定绘制内容。
                 - 'avg' 表示绘制平均数据；
                 - int 表示绘制对应 loop；
@@ -198,45 +202,66 @@ class PPLoopDataset:
             TypeError: plot_list 类型非法时。
             ValueError: 指定的绘图对象不存在时。
         """
-        delay = get_closest_value(delay, self.delays)
-        if isinstance(plot_list, (int, str)):
-            plot_list = [plot_list]
-        elif not isinstance(plot_list, (list, tuple)):
-            try:
-                plot_list = list(plot_list)
-            except TypeError:
-                raise TypeError("Invalid plot_list type, plot_list must be int, str, list, tuple or iterable.")
-        for item in plot_list:
-            if isinstance(item, str) and item.lower() == 'avg':
-                if hasattr(self, 'avg_data') and self.avg_data is not None:
-                    plt.plot(self.wavelengths, self.avg_data.loc[delay, :], label='Averaged')
+        if isinstance(delay, (list, tuple)) and isinstance(plot_list, (list, tuple)):
+            raise ValueError(f'目前不支持 delay 和 plot_list 同时为列表,请分开绘图。')
+        if isinstance(delay, (list, tuple)):
+            for d in delay:
+                d = get_closest_value(d, self.delays)
+                if plot_list == 'avg':
+                    plt.plot(self.wavelengths, self.avg_data.loc[d, :], label=f'{d:.1f} ps')
                 else:
-                    raise ValueError("No averaged data calculated.")
-            else:
+                    plt.plot(self.wavelengths, self.data[id-1].loc[d, :], label=f'{d:.1f} ps')
+        else:
+            delay = get_closest_value(delay, self.delays)
+            if isinstance(plot_list, (int, str)):
+                plot_list = [plot_list]
+            elif not isinstance(plot_list, (list, tuple)):
                 try:
-                    id = int(item)
-                except Exception:
-                    raise ValueError(f"Invalid plot identifier: {item}")
-                if 1 <= id <= self.loop_num:
-                    plt.plot(self.wavelengths, self.data[id-1].loc[delay, :], label=f'Loop {id}')
+                    plot_list = list(plot_list)
+                except TypeError:
+                    raise TypeError("Invalid plot_list type, plot_list must be int, str, list, tuple or iterable.")
+            for item in plot_list:
+                if isinstance(item, str) and item.lower() == 'avg':
+                    if hasattr(self, 'avg_data') and self.avg_data is not None:
+                        plt.plot(self.wavelengths, self.avg_data.loc[delay, :], label='Averaged')
+                    else:
+                        raise ValueError("No averaged data calculated.")
                 else:
-                    raise ValueError(f"Invalid loop id {id} (should be in [1,{self.loop_num}])")
+                    try:
+                        id = int(item)
+                    except Exception:
+                        raise ValueError(f"Invalid plot identifier: {item}")
+                    if 1 <= id <= self.loop_num:
+                        plt.plot(self.wavelengths, self.data[id-1].loc[delay, :], label=f'Loop {id}')
+                    else:
+                        raise ValueError(f"Invalid loop id {id} (should be in [1,{self.loop_num}])")
         plt.xlabel('Wavelength (nm)', fontsize=14)
         plt.ylabel('$\\Delta$O.D.', fontsize=14)
-        plt.title(f'Plot at delay {delay:.2f} ps',fontsize=14)
+        if isinstance(delay, (list, tuple)):
+            plt.title(f'Plot loop:{plot_list} at selected delays',fontsize=14)
+        else:
+            plt.title(f'Plot at delay {delay:.2f} ps',fontsize=14)
         plt.legend()
         if savefig:
             plt.savefig(os.path.join(self.folder,f'Signal-{delay:.2f}ps.jpg'),bbox_inches='tight',dpi=300)
         plt.show()
 
-    def plot_at_wavelength(self, wl, plot_list, savefig=False):
+    def plot_at_wavelength(
+        self, 
+        wl, 
+        plot_list, 
+        savefig=False,
+        xlim: tuple = None,
+        ylim: tuple = None,
+    ):
         """
-        在指定波长处绘制信号随延时变化的曲线。
+        在指定波长处绘制信号随延时变化的曲线。还支持绘制拟合的指数衰减曲线。
 
         Args:
-            wl (float): 指定波长（单位 nm），将自动匹配到最接近值。
+            wl (float | list | tuple): 指定波长（单位 nm），将自动匹配到最接近值。
             plot_list (int | str | list | tuple): 指定绘制内容。
                 - 'avg' 表示绘制平均数据；
+                - 'decay' 表示绘制拟合的指数衰减曲线（需先调用 calculate_decay()）；
                 - int 表示绘制对应 loop；
                 - list/tuple 可包含以上多项。
             savefig (bool, optional): 是否保存图片。默认为 False。
@@ -245,33 +270,77 @@ class PPLoopDataset:
             TypeError: plot_list 类型非法时。
             ValueError: 指定的绘图对象不存在时。
         """
-        wl = get_closest_value(wl, self.wavelengths)
-        if isinstance(plot_list, (int, str)):
-            plot_list = [plot_list]
-        elif not isinstance(plot_list, (list, tuple)):
-            try:
-                plot_list = list(plot_list)
-            except TypeError:
-                raise TypeError("Invalid plot_list type, plot_list must be int, str, list, tuple or iterable.")
-        for item in plot_list:
-            if isinstance(item, str) and item.lower() == 'avg':
-                if hasattr(self, 'avg_data') and self.avg_data is not None:
-                    plt.plot(self.delays, self.avg_data.loc[:, wl], label='Averaged')
+        if isinstance(wl, (list, tuple)) and isinstance(plot_list, (list, tuple)):
+            raise ValueError(f'目前不支持 delay 和 plot_list 同时为列表,请分开绘图。')
+        
+        if isinstance(wl, (list, tuple)):
+            for w in wl:
+                w = get_closest_value(w, self.wavelengths)
+                if plot_list == 'avg':
+                    plt.plot(self.delays, self.avg_data.loc[:, w], label=f'{w:.0f} nm')
                 else:
-                    raise ValueError("No averaged data calculated.")
-            else:
+                    plt.plot(self.delays, self.data[id-1].loc[:, w], label=f'{w:.0f} nm')
+        else:
+            wl = get_closest_value(wl, self.wavelengths)
+            if isinstance(plot_list, (int, str)):
+                plot_list = [plot_list]
+            elif not isinstance(plot_list, (list, tuple)):
                 try:
-                    id = int(item)
-                except Exception:
-                    raise ValueError(f"Invalid plot identifier: {item}")
-                if 1 <= id <= self.loop_num:
-                    plt.plot(self.delays, self.data[id-1].loc[:, wl], label=f'Loop {id}')
+                    plot_list = list(plot_list)
+                except TypeError:
+                    raise TypeError("Invalid plot_list type, plot_list must be int, str, list, tuple or iterable.")
+            for item in plot_list:
+                if isinstance(item, str):
+                    if item.lower() == 'avg':
+                        if hasattr(self, 'avg_data') and self.avg_data is not None:
+                            plt.plot(self.delays, self.avg_data.loc[:, wl], label='Averaged')
+                        else:
+                            raise ValueError("No averaged data calculated.")
+                    elif item.lower() == 'decay':
+                        if hasattr(self, 'decay'):
+                            bg_coeffs, peak_coeffs, trough_coeffs = self.decay[wl]
+                            if bg_coeffs is None:
+                                print(f"No valid decay fit parameters for wavelength {wl} nm.")
+                                continue
+                            bg_curve = np.poly1d(bg_coeffs)(self.delays)
+                            peak_curve = np.poly1d(peak_coeffs)(self.delays)
+                            trough_curve = np.poly1d(trough_coeffs)(self.delays)
+                            plt.plot(self.delays, bg_curve, 'k--', label='Decay')
+                            plt.plot(self.delays, peak_curve, 'r--', label='Up decay')
+                            plt.plot(self.delays, trough_curve, 'b--', label='Low decay')
+                        else:
+                            print("Decay parameters not calculated. Call calculate_decay() first.")
+                            continue
+                    # elif item.lower() == 'exp': # 旧的指数衰减拟合方案
+                    #     if hasattr(self, 'exp_params'):
+                    #         wl_index = np.where(self.wavelengths == wl)[0][0]
+                    #         A, tau, C = self.exp_params[wl_index]
+                    #         if np.isnan(A) or np.isnan(tau) or np.isnan(C):
+                    #             print(f"No valid exponential fit parameters for wavelength {wl} nm.")
+                    #             continue
+                    #         exp_curve = A * np.exp(-self.delays / tau) + C
+                    #         plt.plot(self.delays, exp_curve, label=f'Exp Fit ($\\tau$={tau:.2f} ps)')
+                    #     else:
+                    #         print("Exponential decay parameters not calculated. Call calculate_decay() first.")
+                    #         continue
                 else:
-                    raise ValueError(f"Invalid loop id {id} (should be in [1,{self.loop_num}])")
+                    try:
+                        id = int(item)
+                    except Exception:
+                        raise ValueError(f"Invalid plot identifier: {item}")
+                    if 1 <= id <= self.loop_num:
+                        plt.plot(self.delays, self.data[id-1].loc[:, wl], label=f'Loop {id}')
+                    else:
+                        raise ValueError(f"Invalid loop id {id} (should be in [1,{self.loop_num}])")
         plt.xlabel('Delay (ps)', fontsize=14)
         plt.ylabel('$\\Delta$O.D.', fontsize=14)
-        plt.title(f'Plot at wavelength {wl:.0f} nm',fontsize=14)
+        if isinstance(wl, (list, tuple)):
+            plt.title(f'Plot loop:{plot_list} at selected wavelengths',fontsize=14)
+        else:
+            plt.title(f'Plot at wavelength {wl:.0f} nm',fontsize=14)
         plt.legend()
+        plt.xlim(xlim)
+        plt.ylim(ylim)
         if savefig:
             plt.savefig(os.path.join(self.folder,f'Signal-{wl:.0f}nm.jpg'),bbox_inches='tight',dpi=300)
         plt.show()
@@ -300,9 +369,10 @@ class PPLoopDataset:
 
     def plot_imshow(
         self,
-        index: Literal['avg'] | None = 'avg',
+        index: Literal['avg','qb'] | None = 'avg',
         cmap: Literal['bwr', 'RdBu_r'] = 'bwr', # 只支持红白蓝配色
         vmaxtype: Literal['maxmin', 'absmax'] = 'maxmin', # 最大值类型
+        vlim: tuple = None,
         xlim: tuple = None,
         ylim: tuple = None,
     ):
@@ -310,19 +380,24 @@ class PPLoopDataset:
         热图版本其一：plt.imshow()。
 
         Args:
-            index ('avg' | None): 绘制对象，默认为 'avg'。【以后还要支持'chirp' file】
+            index ('avg','qb' | None): 绘制对象，默认为 'avg'。【以后还要支持'chirp' file】
             cmap (str): 色彩映射，'bwr' 或 'RdBu_r'。
             vmaxtype ('maxmin' | 'absmax'): 最大值类型，'maxmin' 表示取最大值和最小值，'absmax' 表示取绝对值最大值。
+            vlim (tuple | None): 自定义 (vmax, vmin) 并无视 vmaxtype，默认为 None。
             xlim (tuple): x 轴范围，默认为 None。
             ylim (tuple): y 轴范围，默认为 None。
         """
         if index == 'avg': data = self.avg_data
+        elif index == 'qb': data = self.qb_data
         else: raise ValueError(f"Invalid index: {index}.")
-        if vmaxtype == 'maxmin':
-            vmax = np.nanmax(data.values); vmin = np.nanmin(data.values)
-        elif vmaxtype == 'absmax':
-            vmax = np.nanmax(np.abs(data.values)); vmin = -vmax
-        else: raise ValueError(f"Invalide vmaxtype: {vmaxtype}.")
+        if vlim is not None:
+            vmax, vmin = vlim
+        else:
+            if vmaxtype == 'maxmin':
+                vmax = np.nanmax(data.values); vmin = np.nanmin(data.values)
+            elif vmaxtype == 'absmax':
+                vmax = np.nanmax(np.abs(data.values)); vmin = -vmax
+            else: raise ValueError(f"Invalide vmaxtype: {vmaxtype}.")
         extent = [self.wavelengths[0], self.wavelengths[-1], self.delays[0], self.delays[-1]]
         plt.figure(figsize=(5,4))
         plt.imshow(
@@ -370,6 +445,7 @@ class PPLoopDataset:
             else:
                 raise ValueError(f"Invalid loop identifier: {loop}")
         wl = get_closest_value(ref_wl, self.wavelengths)
+        count = 0
         for id in clean_target:
             data_clean = self.data[id].copy()
             # 第一行和最后一行无法处理
@@ -381,7 +457,9 @@ class PPLoopDataset:
                 # if abs(curr_val-prev_val) > threshold and abs(curr_val-next_val) > threshold:
                     data_clean.iloc[i] = (self.data[id].iloc[i-1]+self.data[id].iloc[i+1])/2
                     print(f'Clean jump point in loop {id+1} at {self.delays[i]} ps')
+                    count += 1
             self.data[id] = data_clean
+        print(f'Cleaned {count} jump points in total.')
 
     def calculate_averaged_data(self, index='all'):
         """
@@ -461,7 +539,6 @@ class PPLoopDataset:
             plt.show()
         return self.chirp_coeffs
 
-
     def correct_chirp(self):
         """
         对平均数据做 chirp 校正
@@ -482,6 +559,81 @@ class PPLoopDataset:
         self.avg_data = interpolated_data
         self.chirp_corrected = True
         print(f'Chirp corrected for averaged data.')
+
+    def calculate_decay(self, delay_cut_start=0.9, deg=3):
+        """
+        现在考虑，截取一段时间，比如[0.9:]，然后把后面的所有极大值和极小值分别取出来并拟合成上下的边界，用上下边界的平均值作为这段的背景拟合值。拟合可以先考虑多项式拟合。
+
+        Args:
+            delay_start (float): 指定延时（单位 ps），自动匹配最接近值。
+
+        Returns:
+            decay_constants (dict): 各波长对应的衰减常数（单位 ps）。
+        """
+        self.decay = {}
+        delay_cut_start = get_closest_value(delay_cut_start, self.delays)
+        for wl in self.wavelengths:
+            data_segment = self.avg_data.loc[delay_cut_start:, wl].dropna()
+            if data_segment.empty:
+                self.decay[wl] = [None, None, None]
+                continue
+            peaks, _ = find_peaks(data_segment.values)
+            troughs, _ = find_peaks(-data_segment.values)
+            peak_delays = data_segment.index.values[peaks]
+            peak_values = data_segment.values[peaks]
+            trough_delays = data_segment.index.values[troughs]
+            trough_values = data_segment.values[troughs]
+            if len(peak_delays) < deg or len(trough_delays) < deg:
+                self.decay[wl] = [None, None, None]
+                continue
+            peak_fit_coeffs = np.polyfit(peak_delays, peak_values, deg=deg)
+            trough_fit_coeffs = np.polyfit(trough_delays, trough_values, deg=deg)
+            self.decay[wl] = [(peak_fit_coeffs + trough_fit_coeffs) / 2, peak_fit_coeffs, trough_fit_coeffs] # 存储背景、上边界、下边界
+        return self.decay
+
+        # 旧的指数衰减拟合方案
+        # self.exp_params = []
+        # for wl in self.wavelengths:
+        #     data_segment = self.avg_data.loc[delay_start_cutoff:, wl].dropna()
+        #     if data_segment.empty:
+        #         self.exp_params.append((np.nan, np.nan, np.nan))
+        #         continue
+        #     def exp_func(t, A, tau, C):
+        #         return A * np.exp(-t / tau) + C
+        #     from scipy.optimize import curve_fit
+        #     try:
+        #         params, _ = curve_fit(exp_func, data_segment.index.values, data_segment.values, p0=(data_segment.values[0], 5, 0))
+        #         self.exp_params.append(tuple(params))
+        #     except RuntimeError:
+        #         self.exp_params.append((np.nan, np.nan, np.nan))
+        # print(f'Calculated exponential decay parameters from delay {delay_start_cutoff} ps.')
+
+    def calculate_quantum_beats(self):
+        """
+        通过扣除拟合的指数衰减背景，计算平均数据的量子振荡成分。
+
+        Returns:
+            qb_data (pd.DataFrame): 量子振荡成分数据。
+        """
+        if not hasattr(self, 'decay'):
+            print(f'Calculate exponential decay parameters first!')
+            return
+        fitted_data = pd.DataFrame(index=self.delays, columns=self.wavelengths)
+        fitted_data.index.name = '0' # 保持与原始数据格式一致
+        for wl in self.wavelengths:
+            bg_coeff = self.decay[wl][0]
+            if bg_coeff is None:
+                fitted_data[wl] = np.nan
+            else:
+                fitted_data[wl] = np.poly1d(bg_coeff)(self.delays)
+        self.qb_data = self.avg_data - fitted_data
+        print(f'Calculated quantum beats data.')
+
+        # from scipy.signal import savgol_filter
+        # smoothed_data = self.avg_data.apply(lambda col: savgol_filter(col, window_length=11, polyorder=3), axis=0)
+        # self.qb_data = self.avg_data - smoothed_data
+        # print(f'Calculated quantum beats data.')
+        # return self.qb_data
 
     ########## Save Data ##########
     def save_averaged_data(self):
@@ -508,3 +660,14 @@ class PPLoopDataset:
 
         print(f"Saved averaged data → {save_avg_path}")
         print(f"Saved loop info → {self.info_mgr.path}")
+
+
+    ########## Trial functions ##########
+    def remove_scatter_background(self):
+        """
+        尝试去除散射背景，观察是否效果会变好。
+        """
+        scatter = self.avg_data.loc[:0.4, :].mean()
+        # plt.plot(self.wavelengths, scatter)
+        # plt.show()
+        self.avg_data = self.avg_data - scatter
