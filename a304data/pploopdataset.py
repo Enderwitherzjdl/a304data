@@ -173,7 +173,7 @@ class PPLoopDataset:
         self.loop_num = len(self.data)
         print(f'Load original files: {self.loop_num} loops.')
     
-    def load_chirp_data(self,chirp_dir):
+    def _load_chirp_data(self,chirp_dir):
         """
         加载 chirp 数据。只允许使用 chirp 数据计算 chirp。
 
@@ -391,7 +391,7 @@ class PPLoopDataset:
         elif index == 'qb': data = self.qb_data
         else: raise ValueError(f"Invalid index: {index}.")
         if vlim is not None:
-            vmax, vmin = vlim
+            vmin, vmax = vlim
         else:
             if vmaxtype == 'maxmin':
                 vmax = np.nanmax(data.values); vmin = np.nanmin(data.values)
@@ -416,50 +416,7 @@ class PPLoopDataset:
         plt.ylim(ylim)
         plt.show()
 
-    ########## Modify Data ##########
-    def clean_jump_points(self, ref_wl, threshold=0.02, loop='all'):
-        """
-        基于指定的波长，清除跳点/坏点。
-
-        对每个圈的指定波长数据逐点检查，
-        若该点与前后两点的差值均超过阈值 threshold，
-        则用相邻两点平均值替换。
-
-        Args:
-            ref_wl (float): 参考波长，用于判断跳点。
-            threshold (float, optional): 判定阈值，默认 0.02。
-            loop (int | list | tuple | str): 指定处理的圈，
-                - 'all' 表示全部圈；
-                - int 或序列表示指定圈。
-
-        Raises:
-            ValueError: loop 参数非法时。
-        """
-        if loop == 'all':
-            clean_target = range(self.loop_num)
-        else:
-            if isinstance(loop, int):
-                clean_target = [loop-1]
-            elif isinstance(loop, (list, tuple, np.array)):
-                clean_target = [l-1 for l in loop]
-            else:
-                raise ValueError(f"Invalid loop identifier: {loop}")
-        wl = get_closest_value(ref_wl, self.wavelengths)
-        count = 0
-        for id in clean_target:
-            data_clean = self.data[id].copy()
-            # 第一行和最后一行无法处理
-            for i in range(1, len(self.delays)-1):
-                curr_val = self.data[id].iloc[i][wl]
-                prev_val = self.data[id].iloc[i-1][wl]
-                next_val = self.data[id].iloc[i+1][wl]
-                if curr_val-prev_val > threshold and curr_val-next_val > threshold:  # 跳点似乎都是变大。如果采用绝对值检测，会导致相邻三个点跳了两个的情况出问题
-                # if abs(curr_val-prev_val) > threshold and abs(curr_val-next_val) > threshold:
-                    data_clean.iloc[i] = (self.data[id].iloc[i-1]+self.data[id].iloc[i+1])/2
-                    print(f'Clean jump point in loop {id+1} at {self.delays[i]} ps')
-                    count += 1
-            self.data[id] = data_clean
-        print(f'Cleaned {count} jump points in total.')
+    ########## Calculate Data ##########
 
     def calculate_averaged_data(self, index='all'):
         """
@@ -507,7 +464,7 @@ class PPLoopDataset:
         check_function=lambda _,__: True,
         deg=3,
         plot=False,
-    ) -> list:
+    ):
         """
         计算数据中的 chirp。
 
@@ -538,27 +495,6 @@ class PPLoopDataset:
             # self.plot_imshow('chirp', 'RdBu_r', 'maxmin', ylim=(np.min(chirp_delay)-1, np.max(chirp_delay)+1))
             plt.show()
         return self.chirp_coeffs
-
-    def correct_chirp(self):
-        """
-        对平均数据做 chirp 校正
-        """
-        if getattr(self, "chirp_corrected", False):
-            print(f'Chirp correction has been done before.')
-            return
-        interpolated_data = pd.DataFrame(index=self.delays, columns=self.wavelengths)
-        interpolated_data.index.name = '0' # 保持与原始数据格式一致
-        if hasattr(self, 'chirp_coeffs'):
-            poly = np.poly1d(self.chirp_coeffs)
-        else:
-            print(f'Calculate chirp coefficients first!')
-            return
-        for wl in self.wavelengths:
-            interp_func = interp1d(self.delays, self.avg_data[wl], kind='linear', bounds_error=False, fill_value=np.nan)
-            interpolated_data[wl] = interp_func(self.delays + poly(wl) - poly(self.wavelengths[-1]))
-        self.avg_data = interpolated_data
-        self.chirp_corrected = True
-        print(f'Chirp corrected for averaged data.')
 
     def calculate_decay(self, delay_cut_start=0.9, deg=3):
         """
@@ -608,32 +544,207 @@ class PPLoopDataset:
         #         self.exp_params.append((np.nan, np.nan, np.nan))
         # print(f'Calculated exponential decay parameters from delay {delay_start_cutoff} ps.')
 
-    def calculate_quantum_beats(self):
+    def calculate_quantum_beats(self,cal_type='fit',cutoff=0.1,f_low = 0.25,f_high = 2.0,width = 0.15,window_length=11,polyorder=3):
         """
         通过扣除拟合的指数衰减背景，计算平均数据的量子振荡成分。
 
         Returns:
             qb_data (pd.DataFrame): 量子振荡成分数据。
         """
-        if not hasattr(self, 'decay'):
-            print(f'Calculate exponential decay parameters first!')
-            return
-        fitted_data = pd.DataFrame(index=self.delays, columns=self.wavelengths)
-        fitted_data.index.name = '0' # 保持与原始数据格式一致
-        for wl in self.wavelengths:
-            bg_coeff = self.decay[wl][0]
-            if bg_coeff is None:
-                fitted_data[wl] = np.nan
-            else:
-                fitted_data[wl] = np.poly1d(bg_coeff)(self.delays)
-        self.qb_data = self.avg_data - fitted_data
-        print(f'Calculated quantum beats data.')
+        if cal_type == 'fit':
+            if not hasattr(self, 'decay'):
+                print(f'Calculate exponential decay parameters first!')
+                return
+            fitted_data = pd.DataFrame(index=self.delays, columns=self.wavelengths)
+            fitted_data.index.name = '0' # 保持与原始数据格式一致
+            for wl in self.wavelengths:
+                bg_coeff = self.decay[wl][0]
+                if bg_coeff is None:
+                    fitted_data[wl] = np.nan
+                else:
+                    fitted_data[wl] = np.poly1d(bg_coeff)(self.delays)
+            self.qb_data = self.avg_data - fitted_data
+            print(f'Calculated quantum beats data.')
+        elif cal_type == 'fft_filter': # gpt 版本
+            from scipy.fft import fft, ifft, fftfreq
+            qb_data = pd.DataFrame(index=self.delays, columns=self.wavelengths,dtype=float)
+            qb_data.index.name = '0'
 
-        # from scipy.signal import savgol_filter
-        # smoothed_data = self.avg_data.apply(lambda col: savgol_filter(col, window_length=11, polyorder=3), axis=0)
-        # self.qb_data = self.avg_data - smoothed_data
-        # print(f'Calculated quantum beats data.')
-        # return self.qb_data
+            dt = np.mean(np.diff(self.delays))
+            N = len(self.delays)
+            freq = fftfreq(N, dt)   # THz if dt is in ps
+
+            # ---- bandpass parameters (based on your plot) ----
+                # 低频截止（去背景），单位 THz
+                # 高频截止（去噪声）
+                # 过渡带宽 (soft edge)
+
+            # ---- soft bandpass filter (tanh) ----
+            def soft_edge(x, f0, w):
+                return 0.5*(1 + np.tanh((np.abs(x)-f0)/w))
+
+            highpass = soft_edge(freq, f_low, width)          # 去掉低频指数衰减
+            lowpass  = 1 - soft_edge(freq, f_high, width)     # 去掉高频噪声
+            bandpass = highpass * lowpass
+            # plt.plot(freq, bandpass)
+            # plt.show()
+
+            for wl in self.wavelengths:
+                signal = self.avg_data[wl].values.copy()
+
+                # --- remove coherent artifact (t < 0.5 ps) ---
+                mask = self.delays < 0.5
+                if np.any(mask):
+                    # 用 0.5–1 ps 区域的线性外推替代
+                    valid = (~mask) & (self.delays < 1.0)
+                    if valid.sum() > 1:
+                        p = np.polyfit(self.delays[valid], signal[valid], 1)
+                        signal[mask] = np.polyval(p, self.delays[mask])
+                    else:
+                        signal[mask] = signal[~mask][0]
+
+                signal_fft = fft(signal)
+
+                # --- apply bandpass ---
+                filtered_fft = signal_fft * bandpass
+
+                filtered_signal = np.real(ifft(filtered_fft))
+                qb_data[wl] = filtered_signal
+
+            self.qb_data = qb_data
+            print("Calculated quantum beats data (bandpass FFT).")
+
+        elif cal_type == 'fft_filter_copilot':
+            from scipy.fft import fft, ifft, fftfreq
+            qb_data = pd.DataFrame(index=self.delays, columns=self.wavelengths,dtype=float)
+            qb_data.index.name = '0' # 保持与原始数据格式一致
+            dt = np.mean(np.diff(self.delays))
+            N = len(self.delays)
+            freq = fftfreq(N, dt)
+            for wl in self.wavelengths:
+                signal = self.avg_data[wl].values
+                signal_fft = fft(signal)
+                # 设计一个简单的高通滤波器，去除低频成分
+                cutoff = cutoff  # 设置截止频率，根据需要调整
+                filter_mask = np.abs(freq) > cutoff
+                filtered_fft = signal_fft * filter_mask
+                filtered_signal = np.real(ifft(filtered_fft))
+                qb_data[wl] = filtered_signal
+            self.qb_data = qb_data
+            print(f'Calculated quantum beats data.')
+        elif cal_type == 'savgol':
+            from scipy.signal import savgol_filter
+            smoothed_data = self.avg_data.apply(lambda col: savgol_filter(col, window_length=window_length, polyorder=polyorder), axis=0)
+            self.qb_data = self.avg_data - smoothed_data
+            print(f'Calculated quantum beats data.')
+            return self.qb_data
+        elif cal_type == 'manual':
+            m_wl = get_closest_value(485, self.wavelengths)
+            m_delay = get_closest_value(1.0, self.delays)
+            bg_data = pd.DataFrame(index=self.delays, columns=self.wavelengths, dtype=float)
+            bg_data.index.name = '0' # 保持与原始数据格式一致
+            # 接下来把选定wl和delay的两列数据矩阵乘法乘出一个背景
+            for wl in self.wavelengths:
+                for delay in self.delays:
+                    bg_data.at[delay, wl] = self.avg_data.at[m_delay, wl] * self.avg_data.at[delay, m_wl] / self.avg_data.at[m_delay, m_wl]
+            self.qb_data = self.avg_data - bg_data
+            print(f'Calculated quantum beats data.')
+            return self.qb_data
+        else:
+            print(f'Invalid calculation type: {cal_type}. Use "fit" or "fft_filter".')
+
+    ########## Correct Data ##########
+    def correct_chirp(self, chirp_dir:str, check_function=None, deg=3, plot=False):
+        """
+        校正数据中的 chirp。
+
+        Args:
+            chirp_dir (str): chirp 文件目录，包含有且仅有一个 'averaged' 文件。
+            check_function (lambda): 自定义chirp拟合范围函数，配置了一个默认函数。
+            deg (int): chirp 多项式拟合阶数。
+            plot (bool): 是否绘图显示拟合的chirp。
+
+        Returns:
+            chirp_coeffs (list): chirp 的多项式系数。
+        """
+        if getattr(self, "chirp_corrected", False):
+            print(f'Chirp correction has been done before.')
+            return
+        self._load_chirp_data(chirp_dir)
+        def default_check_function(wavelength, delay):
+            # 适配'~/chirp/20251025-pump-530nm-8uW-2500ps-chirp'的chirp区域检定函数
+            if delay > 0.9 or delay < -0.8:
+                return False
+            if wavelength > 620 and delay < 0.6:
+                return False
+            if wavelength > 650 and delay < 0.7:
+                return False
+            return True
+        if check_function is None:
+            check_function = default_check_function
+        self.calculate_chirp(check_function, deg, plot)
+        print(f'Correcting chirp with coefficients: {self.chirp_coeffs}')
+        interpolated_data = pd.DataFrame(index=self.delays, columns=self.wavelengths)
+        interpolated_data.index.name = '0' # 保持与原始数据格式一致
+        if hasattr(self, 'chirp_coeffs'):
+            poly = np.poly1d(self.chirp_coeffs)
+        else:
+            print(f'Calculate chirp coefficients first!')
+            return
+        for wl in self.wavelengths:
+            interp_func = interp1d(self.delays, self.avg_data[wl], kind='linear', bounds_error=False, fill_value=np.nan)
+            interpolated_data[wl] = interp_func(self.delays + poly(wl) - poly(self.wavelengths[-1]))
+        self.avg_data = interpolated_data
+        self.chirp_corrected = True
+        print(f'Chirp corrected for averaged data.')
+
+    def correct_jump_points(self, ref_wl, threshold=0.02, loop='all',delay_range=None):
+        """
+        基于指定的波长，清除跳点/坏点。
+
+        对每个圈的指定波长数据逐点检查，
+        若该点与前后两点的差值均超过阈值 threshold，
+        则用相邻两点平均值替换。
+
+        Args:
+            ref_wl (float): 参考波长，用于判断跳点。
+            threshold (float, optional): 判定阈值，默认 0.02。
+            loop (int | list | tuple | str): 指定处理的圈，
+                - 'all' 表示全部圈；
+                - int 或序列表示指定圈。
+            delay_range (tuple | None): 指定延时范围 (min_delay, max_delay)，仅在该范围内清除跳点。默认为 None，表示全范围处理。
+
+        Raises:
+            ValueError: loop 参数非法时。
+        """
+        if loop == 'all':
+            clean_target = range(self.loop_num)
+        else:
+            if isinstance(loop, int):
+                clean_target = [loop-1]
+            elif isinstance(loop, (list, tuple, np.array)):
+                clean_target = [l-1 for l in loop]
+            else:
+                raise ValueError(f"Invalid loop identifier: {loop}")
+        wl = get_closest_value(ref_wl, self.wavelengths)
+        count = 0
+        for id in clean_target:
+            data_clean = self.data[id].copy()
+            # 第一行和最后一行无法处理
+            for i in range(1, len(self.delays)-1):
+                if delay_range is not None:
+                    if not (delay_range[0] <= self.delays[i] <= delay_range[1]):
+                        continue
+                curr_val = self.data[id].iloc[i][wl]
+                prev_val = self.data[id].iloc[i-1][wl]
+                next_val = self.data[id].iloc[i+1][wl]
+                if curr_val-prev_val > threshold and curr_val-next_val > threshold:  # 跳点似乎都是变大。如果采用绝对值检测，会导致相邻三个点跳了两个的情况出问题
+                # if abs(curr_val-prev_val) > threshold and abs(curr_val-next_val) > threshold:
+                    data_clean.iloc[i] = (self.data[id].iloc[i-1]+self.data[id].iloc[i+1])/2
+                    print(f'Clean jump point in loop {id+1} at {self.delays[i]} ps')
+                    count += 1
+            self.data[id] = data_clean
+        print(f'Cleaned {count} jump points in total.')
 
     ########## Save Data ##########
     def save_averaged_data(self):
@@ -660,7 +771,6 @@ class PPLoopDataset:
 
         print(f"Saved averaged data → {save_avg_path}")
         print(f"Saved loop info → {self.info_mgr.path}")
-
 
     ########## Trial functions ##########
     def remove_scatter_background(self):
