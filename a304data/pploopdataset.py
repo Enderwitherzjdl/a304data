@@ -9,62 +9,14 @@ from typing import Literal
 from .io import load_pp_loop
 from .utils import get_closest_value
 
-class PPInfoManager:
-    """
-    管理 PPLoopDataset 的 metadata 文件（saved_info.dat）。
-
-    支持读取、更新和保存平均值信息、chirp 校正信息等。
-    """
-
-    def __init__(self, folder: str):
-        """
-        初始化并加载 metadata 文件。
-
-        Args:
-            folder (str): 数据文件所在目录
-        """
-        self.path = os.path.join(folder, "saved_info.dat")
-        self.info: dict = self._load_info()
-
-    def _load_info(self) -> dict:
-        """
-        读取 saved_info.dat，如果文件不存在则返回空字典。
-        """
-        if os.path.exists(self.path):
-            with open(self.path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return {}
-
-    def save(self):
-        """
-        将当前 info 字典保存到文件。
-        """
-        with open(self.path, "w", encoding="utf-8") as f:
-            json.dump(self.info, f, indent=2)
-
-    def update(self, section: str, key: str, value):
-        """
-        更新 info 中指定 section 的键值，如果 section 不存在会自动创建。
-
-        Args:
-            section (str): 信息分类，例如 "data"、"chirp"
-            key (str): 键名
-            value: 键值
-        """
-        self.info.setdefault(section, {})
-        self.info[section][key] = value
-        self.save()
-
-    def get(self, section: str, key: str, default=None):
-        """
-        获取 info 中指定 section 的键值，如果不存在返回默认值。
-        """
-        return self.info.get(section, {}).get(key, default)
-
+from .info_manager import PPInfoManager
+from .plot import PPPlotTool
+from .correct import PPCorrectTool
+from .qbanalyzer import QBAnalyzer
 
 class PPLoopDataset:
     """
-    Pump-Probe 数据集类。
+    Pump-Probe 数据集类。（TODO 注释要重写）
     
     创建时指定目录 folder 和分析的波长范围 wl_min, wl_max。
     - 可见区：建议 450~750 nm。
@@ -89,6 +41,9 @@ class PPLoopDataset:
         self.wl_min = wl_min
         self.wl_max = wl_max
         self.info_mgr = PPInfoManager(folder)
+        self.qb = QBAnalyzer(self)             # 挂载 量子拍qb 工具
+        self.plot = PPPlotTool(self)           # 挂载 绘图plot 工具
+        self.correct = PPCorrectTool(self)     # 挂载 校正correct 工具
         # 加载数据
         self.data = []
         if read_averaged_only == False:
@@ -102,7 +57,7 @@ class PPLoopDataset:
             self.delays = self.avg_data.index.values
             self.wavelengths = self.avg_data.columns.values
 
-    ########## Load Data ##########
+    # --------------- Load Data ---------------
     def _check_saved_averaged_file(self):
         """
         检查并返回平均值文件。
@@ -185,238 +140,7 @@ class PPLoopDataset:
             raise ValueError(f'Not exactly one chirp file.')
         self.chirp_data = load_pp_loop(os.path.join(chirp_dir,files[0]), self.wl_min, self.wl_max)
 
-    ########## Plot Data ##########
-    def plot_at_delay(self, delay, plot_list, savefig=False):
-        """
-        在指定延时处绘制信号曲线。
-
-        Args:
-            delay (float | list | tuple): 指定延时（单位 ps），将自动匹配到最接近值。
-            plot_list (int | str | list | tuple): 指定绘制内容。
-                - 'avg' 表示绘制平均数据；
-                - int 表示绘制对应 loop；
-                - list/tuple 可包含以上多项。
-            savefig (bool, optional): 是否保存图片。默认为 False。
-
-        Raises:
-            TypeError: plot_list 类型非法时。
-            ValueError: 指定的绘图对象不存在时。
-        """
-        if isinstance(delay, (list, tuple)) and isinstance(plot_list, (list, tuple)):
-            raise ValueError(f'目前不支持 delay 和 plot_list 同时为列表,请分开绘图。')
-        if isinstance(delay, (list, tuple)):
-            for d in delay:
-                d = get_closest_value(d, self.delays)
-                if plot_list == 'avg':
-                    plt.plot(self.wavelengths, self.avg_data.loc[d, :], label=f'{d:.1f} ps')
-                else:
-                    plt.plot(self.wavelengths, self.data[id-1].loc[d, :], label=f'{d:.1f} ps')
-        else:
-            delay = get_closest_value(delay, self.delays)
-            if isinstance(plot_list, (int, str)):
-                plot_list = [plot_list]
-            elif not isinstance(plot_list, (list, tuple)):
-                try:
-                    plot_list = list(plot_list)
-                except TypeError:
-                    raise TypeError("Invalid plot_list type, plot_list must be int, str, list, tuple or iterable.")
-            for item in plot_list:
-                if isinstance(item, str) and item.lower() == 'avg':
-                    if hasattr(self, 'avg_data') and self.avg_data is not None:
-                        plt.plot(self.wavelengths, self.avg_data.loc[delay, :], label='Averaged')
-                    else:
-                        raise ValueError("No averaged data calculated.")
-                else:
-                    try:
-                        id = int(item)
-                    except Exception:
-                        raise ValueError(f"Invalid plot identifier: {item}")
-                    if 1 <= id <= self.loop_num:
-                        plt.plot(self.wavelengths, self.data[id-1].loc[delay, :], label=f'Loop {id}')
-                    else:
-                        raise ValueError(f"Invalid loop id {id} (should be in [1,{self.loop_num}])")
-        plt.xlabel('Wavelength (nm)', fontsize=14)
-        plt.ylabel('$\\Delta$O.D.', fontsize=14)
-        if isinstance(delay, (list, tuple)):
-            plt.title(f'Plot loop:{plot_list} at selected delays',fontsize=14)
-        else:
-            plt.title(f'Plot at delay {delay:.2f} ps',fontsize=14)
-        plt.legend()
-        if savefig:
-            plt.savefig(os.path.join(self.folder,f'Signal-{delay:.2f}ps.jpg'),bbox_inches='tight',dpi=300)
-        plt.show()
-
-    def plot_at_wavelength(
-        self, 
-        wl, 
-        plot_list, 
-        savefig=False,
-        xlim: tuple = None,
-        ylim: tuple = None,
-    ):
-        """
-        在指定波长处绘制信号随延时变化的曲线。还支持绘制拟合的指数衰减曲线。
-
-        Args:
-            wl (float | list | tuple): 指定波长（单位 nm），将自动匹配到最接近值。
-            plot_list (int | str | list | tuple): 指定绘制内容。
-                - 'avg' 表示绘制平均数据；
-                - 'decay' 表示绘制拟合的指数衰减曲线（需先调用 calculate_decay()）；
-                - int 表示绘制对应 loop；
-                - list/tuple 可包含以上多项。
-            savefig (bool, optional): 是否保存图片。默认为 False。
-
-        Raises:
-            TypeError: plot_list 类型非法时。
-            ValueError: 指定的绘图对象不存在时。
-        """
-        if isinstance(wl, (list, tuple)) and isinstance(plot_list, (list, tuple)):
-            raise ValueError(f'目前不支持 delay 和 plot_list 同时为列表,请分开绘图。')
-        
-        if isinstance(wl, (list, tuple)):
-            for w in wl:
-                w = get_closest_value(w, self.wavelengths)
-                if plot_list == 'avg':
-                    plt.plot(self.delays, self.avg_data.loc[:, w], label=f'{w:.0f} nm')
-                else:
-                    plt.plot(self.delays, self.data[id-1].loc[:, w], label=f'{w:.0f} nm')
-        else:
-            wl = get_closest_value(wl, self.wavelengths)
-            if isinstance(plot_list, (int, str)):
-                plot_list = [plot_list]
-            elif not isinstance(plot_list, (list, tuple)):
-                try:
-                    plot_list = list(plot_list)
-                except TypeError:
-                    raise TypeError("Invalid plot_list type, plot_list must be int, str, list, tuple or iterable.")
-            for item in plot_list:
-                if isinstance(item, str):
-                    if item.lower() == 'avg':
-                        if hasattr(self, 'avg_data') and self.avg_data is not None:
-                            plt.plot(self.delays, self.avg_data.loc[:, wl], label='Averaged')
-                        else:
-                            raise ValueError("No averaged data calculated.")
-                    elif item.lower() == 'decay':
-                        if hasattr(self, 'decay'):
-                            bg_coeffs, peak_coeffs, trough_coeffs = self.decay[wl]
-                            if bg_coeffs is None:
-                                print(f"No valid decay fit parameters for wavelength {wl} nm.")
-                                continue
-                            bg_curve = np.poly1d(bg_coeffs)(self.delays)
-                            peak_curve = np.poly1d(peak_coeffs)(self.delays)
-                            trough_curve = np.poly1d(trough_coeffs)(self.delays)
-                            plt.plot(self.delays, bg_curve, 'k--', label='Decay')
-                            plt.plot(self.delays, peak_curve, 'r--', label='Up decay')
-                            plt.plot(self.delays, trough_curve, 'b--', label='Low decay')
-                        else:
-                            print("Decay parameters not calculated. Call calculate_decay() first.")
-                            continue
-                    # elif item.lower() == 'exp': # 旧的指数衰减拟合方案
-                    #     if hasattr(self, 'exp_params'):
-                    #         wl_index = np.where(self.wavelengths == wl)[0][0]
-                    #         A, tau, C = self.exp_params[wl_index]
-                    #         if np.isnan(A) or np.isnan(tau) or np.isnan(C):
-                    #             print(f"No valid exponential fit parameters for wavelength {wl} nm.")
-                    #             continue
-                    #         exp_curve = A * np.exp(-self.delays / tau) + C
-                    #         plt.plot(self.delays, exp_curve, label=f'Exp Fit ($\\tau$={tau:.2f} ps)')
-                    #     else:
-                    #         print("Exponential decay parameters not calculated. Call calculate_decay() first.")
-                    #         continue
-                else:
-                    try:
-                        id = int(item)
-                    except Exception:
-                        raise ValueError(f"Invalid plot identifier: {item}")
-                    if 1 <= id <= self.loop_num:
-                        plt.plot(self.delays, self.data[id-1].loc[:, wl], label=f'Loop {id}')
-                    else:
-                        raise ValueError(f"Invalid loop id {id} (should be in [1,{self.loop_num}])")
-        plt.xlabel('Delay (ps)', fontsize=14)
-        plt.ylabel('$\\Delta$O.D.', fontsize=14)
-        if isinstance(wl, (list, tuple)):
-            plt.title(f'Plot loop:{plot_list} at selected wavelengths',fontsize=14)
-        else:
-            plt.title(f'Plot at wavelength {wl:.0f} nm',fontsize=14)
-        plt.legend()
-        plt.xlim(xlim)
-        plt.ylim(ylim)
-        if savefig:
-            plt.savefig(os.path.join(self.folder,f'Signal-{wl:.0f}nm.jpg'),bbox_inches='tight',dpi=300)
-        plt.show()
-    
-    def plot_with_loop(self, wl, delay, savefig=False):
-        """
-        绘制指定波长与延时下，各圈信号强度随圈数的变化。
-
-        Args:
-            wl (float): 指定波长（单位 nm），自动匹配最接近值。
-            delay (float): 指定延时（单位 ps），自动匹配最接近值。
-            savefig (bool, optional): 是否保存图片。默认为 False。
-        """
-        wl = get_closest_value(wl, self.wavelengths)
-        delay = get_closest_value(delay, self.delays)
-        intensities = []
-        for d in self.data:
-            intensities.append(d.loc[delay, wl])
-        plt.plot(np.arange(1, len(intensities)+1), intensities)
-        plt.xlabel('Loop number', fontsize=14)
-        plt.ylabel('$\\Delta$O.D.', fontsize=14)
-        plt.title(f'Intensity at $\\lambda$={wl:.0f} nm, $\\tau$={delay:.2f} ps, ',fontsize=14)
-        if savefig:
-            plt.savefig(os.path.join(self.folder,'SignalVsTime-{wl:.0f}nm-{delay:.2f}ps.jpg'),bbox_inches='tight',dpi=300)
-        plt.show()
-
-    def plot_imshow(
-        self,
-        index: Literal['avg','qb'] | None = 'avg',
-        cmap: Literal['bwr', 'RdBu_r'] = 'bwr', # 只支持红白蓝配色
-        vmaxtype: Literal['maxmin', 'absmax'] = 'maxmin', # 最大值类型
-        vlim: tuple = None,
-        xlim: tuple = None,
-        ylim: tuple = None,
-    ):
-        """
-        热图版本其一：plt.imshow()。
-
-        Args:
-            index ('avg','qb' | None): 绘制对象，默认为 'avg'。【以后还要支持'chirp' file】
-            cmap (str): 色彩映射，'bwr' 或 'RdBu_r'。
-            vmaxtype ('maxmin' | 'absmax'): 最大值类型，'maxmin' 表示取最大值和最小值，'absmax' 表示取绝对值最大值。
-            vlim (tuple | None): 自定义 (vmax, vmin) 并无视 vmaxtype，默认为 None。
-            xlim (tuple): x 轴范围，默认为 None。
-            ylim (tuple): y 轴范围，默认为 None。
-        """
-        if index == 'avg': data = self.avg_data
-        elif index == 'qb': data = self.qb_data
-        else: raise ValueError(f"Invalid index: {index}.")
-        if vlim is not None:
-            vmin, vmax = vlim
-        else:
-            if vmaxtype == 'maxmin':
-                vmax = np.nanmax(data.values); vmin = np.nanmin(data.values)
-            elif vmaxtype == 'absmax':
-                vmax = np.nanmax(np.abs(data.values)); vmin = -vmax
-            else: raise ValueError(f"Invalide vmaxtype: {vmaxtype}.")
-        extent = [self.wavelengths[0], self.wavelengths[-1], self.delays[0], self.delays[-1]]
-        plt.figure(figsize=(5,4))
-        plt.imshow(
-            X = data.values,
-            aspect = 'auto',        # 'auto' 为拉伸，'equal' 为等比例
-            origin = 'lower',
-            extent = extent,
-            cmap = cmap,
-            vmax = vmax,
-            vmin = vmin,
-        )
-        plt.colorbar(label='$\\Delta$O.D.')
-        plt.xlabel('Wavelength (nm)',fontsize=14)
-        plt.ylabel('Delay (ps)',fontsize=14)
-        plt.xlim(xlim)
-        plt.ylim(ylim)
-        plt.show()
-
-    ########## Calculate Data ##########
+    # --------------- Calculate Data ---------------
 
     def calculate_averaged_data(self, index='all'):
         """
@@ -544,7 +268,7 @@ class PPLoopDataset:
         #         self.exp_params.append((np.nan, np.nan, np.nan))
         # print(f'Calculated exponential decay parameters from delay {delay_start_cutoff} ps.')
 
-    def calculate_quantum_beats(self,cal_type='fit',cutoff=0.1,f_low = 0.25,f_high = 2.0,width = 0.15,window_length=11,polyorder=3):
+    def calculate_quantum_beats_old(self,cal_type='fit',cutoff=0.1,f_low = 0.25,f_high = 2.0,width = 0.15,window_length=11,polyorder=3): # 准备删除的旧函数
         """
         通过扣除拟合的指数衰减背景，计算平均数据的量子振荡成分。
 
@@ -651,102 +375,9 @@ class PPLoopDataset:
             print(f'Calculated quantum beats data.')
             return self.qb_data
         else:
-            print(f'Invalid calculation type: {cal_type}. Use "fit" or "fft_filter".')
+            print(f'Invalid calculation type: {cal_type}.')
 
-    ########## Correct Data ##########
-    def correct_chirp(self, chirp_dir:str, check_function=None, deg=3, plot=False):
-        """
-        校正数据中的 chirp。
-
-        Args:
-            chirp_dir (str): chirp 文件目录，包含有且仅有一个 'averaged' 文件。
-            check_function (lambda): 自定义chirp拟合范围函数，配置了一个默认函数。
-            deg (int): chirp 多项式拟合阶数。
-            plot (bool): 是否绘图显示拟合的chirp。
-
-        Returns:
-            chirp_coeffs (list): chirp 的多项式系数。
-        """
-        if getattr(self, "chirp_corrected", False):
-            print(f'Chirp correction has been done before.')
-            return
-        self._load_chirp_data(chirp_dir)
-        def default_check_function(wavelength, delay):
-            # 适配'~/chirp/20251025-pump-530nm-8uW-2500ps-chirp'的chirp区域检定函数
-            if delay > 0.9 or delay < -0.8:
-                return False
-            if wavelength > 620 and delay < 0.6:
-                return False
-            if wavelength > 650 and delay < 0.7:
-                return False
-            return True
-        if check_function is None:
-            check_function = default_check_function
-        self.calculate_chirp(check_function, deg, plot)
-        print(f'Correcting chirp with coefficients: {self.chirp_coeffs}')
-        interpolated_data = pd.DataFrame(index=self.delays, columns=self.wavelengths)
-        interpolated_data.index.name = '0' # 保持与原始数据格式一致
-        if hasattr(self, 'chirp_coeffs'):
-            poly = np.poly1d(self.chirp_coeffs)
-        else:
-            print(f'Calculate chirp coefficients first!')
-            return
-        for wl in self.wavelengths:
-            interp_func = interp1d(self.delays, self.avg_data[wl], kind='linear', bounds_error=False, fill_value=np.nan)
-            interpolated_data[wl] = interp_func(self.delays + poly(wl) - poly(self.wavelengths[-1]))
-        self.avg_data = interpolated_data
-        self.chirp_corrected = True
-        print(f'Chirp corrected for averaged data.')
-
-    def correct_jump_points(self, ref_wl, threshold=0.02, loop='all',delay_range=None):
-        """
-        基于指定的波长，清除跳点/坏点。
-
-        对每个圈的指定波长数据逐点检查，
-        若该点与前后两点的差值均超过阈值 threshold，
-        则用相邻两点平均值替换。
-
-        Args:
-            ref_wl (float): 参考波长，用于判断跳点。
-            threshold (float, optional): 判定阈值，默认 0.02。
-            loop (int | list | tuple | str): 指定处理的圈，
-                - 'all' 表示全部圈；
-                - int 或序列表示指定圈。
-            delay_range (tuple | None): 指定延时范围 (min_delay, max_delay)，仅在该范围内清除跳点。默认为 None，表示全范围处理。
-
-        Raises:
-            ValueError: loop 参数非法时。
-        """
-        if loop == 'all':
-            clean_target = range(self.loop_num)
-        else:
-            if isinstance(loop, int):
-                clean_target = [loop-1]
-            elif isinstance(loop, (list, tuple, np.array)):
-                clean_target = [l-1 for l in loop]
-            else:
-                raise ValueError(f"Invalid loop identifier: {loop}")
-        wl = get_closest_value(ref_wl, self.wavelengths)
-        count = 0
-        for id in clean_target:
-            data_clean = self.data[id].copy()
-            # 第一行和最后一行无法处理
-            for i in range(1, len(self.delays)-1):
-                if delay_range is not None:
-                    if not (delay_range[0] <= self.delays[i] <= delay_range[1]):
-                        continue
-                curr_val = self.data[id].iloc[i][wl]
-                prev_val = self.data[id].iloc[i-1][wl]
-                next_val = self.data[id].iloc[i+1][wl]
-                if curr_val-prev_val > threshold and curr_val-next_val > threshold:  # 跳点似乎都是变大。如果采用绝对值检测，会导致相邻三个点跳了两个的情况出问题
-                # if abs(curr_val-prev_val) > threshold and abs(curr_val-next_val) > threshold:
-                    data_clean.iloc[i] = (self.data[id].iloc[i-1]+self.data[id].iloc[i+1])/2
-                    print(f'Clean jump point in loop {id+1} at {self.delays[i]} ps')
-                    count += 1
-            self.data[id] = data_clean
-        print(f'Cleaned {count} jump points in total.')
-
-    ########## Save Data ##########
+    # --------------- Save Data ---------------
     def save_averaged_data(self):
         """
         保存当前平均数据及相关信息。
@@ -772,7 +403,7 @@ class PPLoopDataset:
         print(f"Saved averaged data → {save_avg_path}")
         print(f"Saved loop info → {self.info_mgr.path}")
 
-    ########## Trial functions ##########
+    # --------------- Trial functions ---------------
     def remove_scatter_background(self):
         """
         尝试去除散射背景，观察是否效果会变好。
