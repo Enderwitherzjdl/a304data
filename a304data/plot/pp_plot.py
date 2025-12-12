@@ -13,7 +13,15 @@ class PPPlotTool:
     def __init__(self, ds:"PPLoopDataset"):
         self.ds = ds
 
-    def at_delay(self, delay, plot_list, savefig=False):
+    def at_delay(
+        self, 
+        delay, 
+        plot_list, 
+        savefig=False,
+        xlim: tuple = None,
+        ylim: tuple = None,
+        cmap: str = 'viridis'
+    ):
         """
         在指定延时处绘制信号曲线。
 
@@ -32,12 +40,32 @@ class PPPlotTool:
         if isinstance(delay, (list, tuple)) and isinstance(plot_list, (list, tuple)):
             raise ValueError(f'目前不支持 delay 和 plot_list 同时为列表,请分开绘图。')
         if isinstance(delay, (list, tuple)):
-            for d in delay:
-                d = get_closest_value(d, self.ds.delays)
+            # 先把 delay 全部贴最近值
+            delays = [get_closest_value(d, self.ds.delays) for d in delay]
+
+            use_color_map = len(delays) >= 5
+            if use_color_map:
+                # 使用渐变色（示例：viridis，你可换其它 cmap）
+                cmap = plt.get_cmap(cmap)
+                colors = [cmap(i / (len(delays) - 1)) for i in range(len(delays))]
+            else:
+                colors = [None] * len(delays)  # 使用默认颜色
+
+            for d, c in zip(delays, colors):
                 if plot_list == 'avg':
-                    plt.plot(self.ds.wavelengths, self.ds.avg_data.loc[d, :], label=f'{d:.1f} ps')
+                    plt.plot(
+                        self.ds.wavelengths,
+                        self.ds.avg_data.loc[d, :],
+                        label=f'{d:.1f} ps',
+                        color=c
+                    )
                 else:
-                    plt.plot(self.ds.wavelengths, self.ds.data[id-1].loc[d, :], label=f'{d:.1f} ps')
+                    plt.plot(
+                        self.ds.wavelengths,
+                        self.ds.data[id-1].loc[d, :],
+                        label=f'{d:.1f} ps',
+                        color=c
+                    )
         else:
             delay = get_closest_value(delay, self.ds.delays)
             if isinstance(plot_list, (int, str)):
@@ -69,6 +97,8 @@ class PPPlotTool:
         else:
             plt.title(f'Plot at delay {delay:.2f} ps',fontsize=14)
         plt.legend()
+        plt.xlim(xlim)
+        plt.ylim(ylim)
         if savefig:
             plt.savefig(os.path.join(self.ds.folder,f'Signal-{delay:.2f}ps.jpg'),bbox_inches='tight',dpi=300)
         plt.show()
