@@ -112,14 +112,14 @@ class PPLoopDataset:
         """
         加载目录中的所有原始 loop 数据文件。
 
-        文件名中需包含 '_loop'。
+        文件名中需包含 '_loop' 或 'pp'。
         使用 load_pp_loop() 读取各文件并保存至 self.data。
         若未检测到任何 loop 数据则报错。
 
         Raises:
             ValueError: 当目录中未找到任何 loop 数据文件时。
         """
-        file_list = [f for f in os.listdir(self.folder) if '_loop' in f]
+        file_list = [f for f in os.listdir(self.folder) if '_loop' in f or 'pp' in f]
         for file in file_list:
             full_path = os.path.join(self.folder, file)
             self.data.append(load_pp_loop(full_path, self.wl_min, self.wl_max))
