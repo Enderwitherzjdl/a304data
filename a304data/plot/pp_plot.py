@@ -13,11 +13,51 @@ class PPPlotTool:
     def __init__(self, ds:"PPLoopDataset"):
         self.ds = ds
 
+    def _set_plot_style(
+        self,
+        title: str | None = None,
+        xlabel: str | None = None,
+        ylabel: str | None = None,
+        xlim: tuple | None = None,
+        ylim: tuple | None = None,
+        fontsize: int = 14,
+        legend: bool = True,
+    ):
+        if title:
+            plt.title(title, fontsize=fontsize)
+        if xlim is not None:
+            plt.xlim(xlim)
+        if ylim is not None:
+            plt.ylim(ylim)
+        if xlabel:
+            plt.xlabel(xlabel, fontsize=fontsize)
+        if ylabel:
+            plt.ylabel(ylabel, fontsize=fontsize)
+        if legend:
+            plt.legend()
+
+    def _get_symbol(self, datatype:str):
+        """
+        Get plot and naming symbols.
+
+        Args:
+            datatype (str): self.ds.type, 'VIS' or 'IR'
+        
+        Returns:
+            symbols (dict): coord,Coord,unit,unitplain,symbol
+        """
+        if datatype == 'VIS':
+            return {'coord':'wavelength', 'Coord':'Wavelength', 'unit':'nm', 'unitplain':'nm', 'symbol':r'$\\lambda$'}
+        elif datatype == 'IR':
+            return {'coord':'wavenumber', 'Coord':'Wavenumber', 'unit':r'cm$^{-1}$', 'unitplain':'cm-1', 'symbol':r'\\tilde{\\nu}'}
+        else:
+            return None
+
     def at_delay(
         self, 
         delay, 
         plot_list, 
-        savefig=False,
+        savefig = False,
         xlim: tuple = None,
         ylim: tuple = None,
         cmap: str = 'viridis'
@@ -90,17 +130,20 @@ class PPPlotTool:
                         plt.plot(self.ds.wavelengths, self.ds.data[id-1].loc[delay, :], label=f'Loop {id}')
                     else:
                         raise ValueError(f"Invalid loop id {id} (should be in [1,{self.ds.loop_num}])")
-        plt.xlabel('Wavelength (nm)', fontsize=14)
-        plt.ylabel('$\\Delta$O.D.', fontsize=14)
-        if isinstance(delay, (list, tuple)):
-            plt.title(f'Plot loop:{plot_list} at selected delays',fontsize=14)
-        else:
-            plt.title(f'Plot at delay {delay:.2f} ps',fontsize=14)
-        plt.legend()
-        plt.xlim(xlim)
-        plt.ylim(ylim)
+        
+        sym = self._get_symbol(self.ds.type)
+        self._set_plot_style(
+            title = f'Signal at {delay:.2f} ps' if isinstance(delay,(int, float)) else f'Signal at selected delays' ,
+            xlabel = f'{sym['Coord']} ({sym['unit']})' ,
+            ylabel = '$\\Delta$O.D.',
+            xlim = xlim,
+            ylim = ylim,
+        )
         if savefig:
-            plt.savefig(os.path.join(self.ds.folder,f'Signal-{delay:.2f}ps.jpg'),bbox_inches='tight',dpi=300)
+            if isinstance(delay, (int, float)):
+                plt.savefig(os.path.join(self.ds.folder, f'Signal-{delay:.2f}ps.jpg'),bbox_inches='tight',dpi=300)
+            else:
+                plt.savefig(os.path.join(self.ds.folder, f'Singal-selected_delays.jpg'), bbox_inches='tight', dpi=300)
         plt.show()
 
     def at_wavelength(
@@ -112,10 +155,10 @@ class PPPlotTool:
         ylim: tuple = None,
     ):
         """
-        在指定波长处绘制信号随延时变化的曲线。还支持绘制拟合的指数衰减曲线。
+        在指定波长/波数处绘制信号随延时变化的曲线。还支持绘制拟合的背景曲线。
 
         Args:
-            wl (float | list | tuple): 指定波长（单位 nm），将自动匹配到最接近值。
+            wl (float | list | tuple): 指定波长/波数（单位 nm/cm-1），将自动匹配到最接近值。
             plot_list (int | str | list | tuple): 指定绘制内容。
                 - 'avg' 表示绘制平均数据；
                 - 'bg' 表示绘制拟合的衰减背景（需调用 .qb 中的方法）；
@@ -130,13 +173,15 @@ class PPPlotTool:
         if isinstance(wl, (list, tuple)) and isinstance(plot_list, (list, tuple)):
             raise ValueError(f'目前不支持 delay 和 plot_list 同时为列表,请分开绘图。')
         
+        sym = self._get_symbol(self.ds.type)
+
         if isinstance(wl, (list, tuple)):
             for w in wl:
                 w = get_closest_value(w, self.ds.wavelengths)
                 if plot_list == 'avg':
-                    plt.plot(self.ds.delays, self.ds.avg_data.loc[:, w], label=f'{w:.0f} nm')
+                    plt.plot(self.ds.delays, self.ds.avg_data.loc[:, w], label=f'{w:.0f} {sym['unit']}')
                 else:
-                    plt.plot(self.ds.delays, self.ds.data[id-1].loc[:, w], label=f'{w:.0f} nm')
+                    plt.plot(self.ds.delays, self.ds.data[id-1].loc[:, w], label=f'{w:.0f} {sym['unit']}')
         else:
             wl = get_closest_value(wl, self.ds.wavelengths)
             if isinstance(plot_list, (int, str)):
@@ -167,25 +212,27 @@ class PPPlotTool:
                         plt.plot(self.ds.delays, self.ds.data[id-1].loc[:, wl], label=f'Loop {id}')
                     else:
                         raise ValueError(f"Invalid loop id {id} (should be in [1,{self.ds.loop_num}])")
-        plt.xlabel('Delay (ps)', fontsize=14)
-        plt.ylabel('$\\Delta$O.D.', fontsize=14)
-        if isinstance(wl, (list, tuple)):
-            plt.title(f'Plot loop:{plot_list} at selected wavelengths',fontsize=14)
-        else:
-            plt.title(f'Plot at wavelength {wl:.0f} nm',fontsize=14)
-        plt.legend()
-        plt.xlim(xlim)
-        plt.ylim(ylim)
+                    
+        self._set_plot_style(
+            title = f'Signal at {sym['coord']} {wl:.0f} {sym['unit']}' if isinstance(wl,(int, float)) else f'Signal at selected {sym['coord']}s' ,
+            xlabel = 'Delay (ps)',
+            ylabel = '$\\Delta$O.D.',
+            xlim = xlim,
+            ylim = ylim,
+        )
         if savefig:
-            plt.savefig(os.path.join(self.ds.folder,f'Signal-{wl:.0f}nm.jpg'),bbox_inches='tight',dpi=300)
+            if isinstance(wl, (int, float)):
+                plt.savefig(os.path.join(self.ds.folder,f'Signal-{wl:.0f}{sym['unitplain']}.jpg'),bbox_inches='tight',dpi=300)
+            else:
+                plt.savefig(os.path.join(self.ds.folder, f'Singal-selected_{sym['coord']}s.jpg'), bbox_inches='tight', dpi=300)
         plt.show()
     
-    def with_loop(self, wl, delay, savefig=False):
+    def with_loop(self, wl, delay, savefig=False, xlim=None, ylim=None):
         """
-        绘制指定波长与延时下，各圈信号强度随圈数的变化。
+        绘制指定波长/波数与延时下，各圈信号强度随圈数的变化。
 
         Args:
-            wl (float): 指定波长（单位 nm），自动匹配最接近值。
+            wl (float): 指定波长/波数（单位 nm/cm-1），自动匹配最接近值。
             delay (float): 指定延时（单位 ps），自动匹配最接近值。
             savefig (bool, optional): 是否保存图片。默认为 False。
         """
@@ -195,11 +242,17 @@ class PPPlotTool:
         for d in self.ds.data:
             intensities.append(d.loc[delay, wl])
         plt.plot(np.arange(1, len(intensities)+1), intensities)
-        plt.xlabel('Loop number', fontsize=14)
-        plt.ylabel('$\\Delta$O.D.', fontsize=14)
-        plt.title(f'Intensity at $\\lambda$={wl:.0f} nm, $\\tau$={delay:.2f} ps, ',fontsize=14)
+        
+        sym = self._get_symbol(self.ds.type)
+        self._set_plot_style(
+            title = f'Intensity at {sym['symbol']}={wl:.0f} {sym['unit']}, $\\tau$={delay:.2f} ps',
+            xlabel = 'Loop number',
+            ylabel = '$\\Delta$O.D.',
+            xlim = xlim,
+            ylim = ylim,
+        )
         if savefig:
-            plt.savefig(os.path.join(self.ds.folder,'SignalVsTime-{wl:.0f}nm-{delay:.2f}ps.jpg'),bbox_inches='tight',dpi=300)
+            plt.savefig(os.path.join(self.ds.folder,f'SignalVsTime-{wl:.0f}{sym['unitplain']}-{delay:.2f}ps.jpg'),bbox_inches='tight',dpi=300)
         plt.show()
 
     def imshow(
@@ -248,9 +301,14 @@ class PPPlotTool:
             vmin = vmin,
         )
         plt.colorbar(label='$\\Delta$O.D.')
-        plt.xlabel('Wavelength (nm)',fontsize=14)
-        plt.ylabel('Delay (ps)',fontsize=14)
-        plt.xlim(xlim)
-        plt.ylim(ylim)
+        sym = self._get_symbol(self.ds.type)
+        self._set_plot_style(
+            title = f'{self.ds.pump_wl} nm pump',
+            xlabel = f'{sym['Coord']} ({sym['unit']})',
+            ylabel = 'Delay (ps)',
+            xlim = xlim,
+            ylim = ylim,
+            legend = False,
+        )
         plt.show()
 

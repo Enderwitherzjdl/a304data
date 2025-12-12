@@ -38,8 +38,10 @@ class PPLoopDataset:
     """
     def __init__(self, folder, wl_min, wl_max, read_averaged_only=False):
         self.folder = folder
+        self.pump_wl = self._extract_pump_wl(os.path.basename(os.path.abspath(folder)))
         self.wl_min = wl_min
         self.wl_max = wl_max
+        self.type = 'VIS'
         self.info_mgr = PPInfoManager(folder)
         self.qb = QBAnalyzer(self)             # 挂载 量子拍qb 工具
         self.plot = PPPlotTool(self)           # 挂载 绘图plot 工具
@@ -56,6 +58,16 @@ class PPLoopDataset:
         else:
             self.delays = self.avg_data.index.values
             self.wavelengths = self.avg_data.columns.values
+
+    def _extract_pump_wl(self, path: str) -> int | None:
+        s = path.lower()
+        m = re.search(r"pump\s*([0-9]{2,5})", s)
+        if m:
+            return int(m.group(1))
+        m = re.search(r"([0-9]{2,5})\s*nm", s)
+        if m:
+            return int(m.group(1))
+        return None
 
     # --------------- Load Data ---------------
     def _check_saved_averaged_file(self):
@@ -112,7 +124,7 @@ class PPLoopDataset:
         """
         加载目录中的所有原始 loop 数据文件。
 
-        文件名中需包含 '_loop' 或 'pp'。
+        文件名中需包含 '_loop'（可见近红外）或 'pp'（红外）。
         使用 load_pp_loop() 读取各文件并保存至 self.data。
         若未检测到任何 loop 数据则报错。
 
@@ -120,6 +132,10 @@ class PPLoopDataset:
             ValueError: 当目录中未找到任何 loop 数据文件时。
         """
         file_list = [f for f in os.listdir(self.folder) if '_loop' in f or 'pp' in f]
+        if 'pp' in file_list[0]: # 通过文件命名判定数据来源
+            self.type = 'IR'
+        else:
+            self.type = 'VIS'
         for file in file_list:
             full_path = os.path.join(self.folder, file)
             self.data.append(load_pp_loop(full_path, self.wl_min, self.wl_max))
