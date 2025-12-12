@@ -88,7 +88,7 @@ class PPPlotTool:
             wl (float | list | tuple): 指定波长（单位 nm），将自动匹配到最接近值。
             plot_list (int | str | list | tuple): 指定绘制内容。
                 - 'avg' 表示绘制平均数据；
-                - 'decay' 表示绘制拟合的指数衰减曲线（需先调用 calculate_decay()）；
+                - 'bg' 表示绘制拟合的衰减背景（需调用 .qb 中的方法）；
                 - int 表示绘制对应 loop；
                 - list/tuple 可包含以上多项。
             savefig (bool, optional): 是否保存图片。默认为 False。
@@ -123,33 +123,11 @@ class PPPlotTool:
                             plt.plot(self.ds.delays, self.ds.avg_data.loc[:, wl], label='Averaged')
                         else:
                             raise ValueError("No averaged data calculated.")
-                    elif item.lower() == 'decay':
-                        if hasattr(self.ds, 'decay'):
-                            bg_coeffs, peak_coeffs, trough_coeffs = self.ds.decay[wl]
-                            if bg_coeffs is None:
-                                print(f"No valid decay fit parameters for wavelength {wl} nm.")
-                                continue
-                            bg_curve = np.poly1d(bg_coeffs)(self.ds.delays)
-                            peak_curve = np.poly1d(peak_coeffs)(self.ds.delays)
-                            trough_curve = np.poly1d(trough_coeffs)(self.ds.delays)
-                            plt.plot(self.ds.delays, bg_curve, 'k--', label='Decay')
-                            plt.plot(self.ds.delays, peak_curve, 'r--', label='Up decay')
-                            plt.plot(self.ds.delays, trough_curve, 'b--', label='Low decay')
+                    elif item.lower() == 'bg':
+                        if hasattr(self.ds, 'bg_data'):
+                            plt.plot(self.ds.delays, self.ds.bg_data.loc[:, wl], label='Background')
                         else:
-                            print("Decay parameters not calculated. Call calculate_decay() first.")
-                            continue
-                    # elif item.lower() == 'exp': # 旧的指数衰减拟合方案
-                    #     if hasattr(self.ds, 'exp_params'):
-                    #         wl_index = np.where(self.ds.wavelengths == wl)[0][0]
-                    #         A, tau, C = self.ds.exp_params[wl_index]
-                    #         if np.isnan(A) or np.isnan(tau) or np.isnan(C):
-                    #             print(f"No valid exponential fit parameters for wavelength {wl} nm.")
-                    #             continue
-                    #         exp_curve = A * np.exp(-self.ds.delays / tau) + C
-                    #         plt.plot(self.ds.delays, exp_curve, label=f'Exp Fit ($\\tau$={tau:.2f} ps)')
-                    #     else:
-                    #         print("Exponential decay parameters not calculated. Call calculate_decay() first.")
-                    #         continue
+                            raise ValueError("No background data calculated.")
                 else:
                     try:
                         id = int(item)
@@ -199,7 +177,7 @@ class PPPlotTool:
         index: Literal['avg','qb'] | None = 'avg',
         cmap: Literal['bwr', 'RdBu_r'] = 'bwr', # 只支持红白蓝配色
         vmaxtype: Literal['maxmin', 'absmax'] = 'maxmin', # 最大值类型
-        vlim: tuple = None,
+        vlim: float | tuple[float, float] = None,
         xlim: tuple = None,
         ylim: tuple = None,
     ):
@@ -210,7 +188,7 @@ class PPPlotTool:
             index ('avg','qb' | None): 绘制对象，默认为 'avg'。【以后还要支持'chirp' file】
             cmap (str): 色彩映射，'bwr' 或 'RdBu_r'。
             vmaxtype ('maxmin' | 'absmax'): 最大值类型，'maxmin' 表示取最大值和最小值，'absmax' 表示取绝对值最大值。
-            vlim (tuple | None): 自定义 (vmax, vmin) 并无视 vmaxtype，默认为 None。
+            vlim (float | tuple[flaot,float] | None): 自定义 (vmax, vmin) 并无视 vmaxtype，默认为 None。
             xlim (tuple): x 轴范围，默认为 None。
             ylim (tuple): y 轴范围，默认为 None。
         """
@@ -218,7 +196,10 @@ class PPPlotTool:
         elif index == 'qb': data = self.ds.qb_data
         else: raise ValueError(f"Invalid index: {index}.")
         if vlim is not None:
-            vmin, vmax = vlim
+            if isinstance(vlim, (int, float)):
+                vmin, vmax = -abs(vlim), abs(vlim)
+            else:
+                vmin, vmax = vlim
         else:
             if vmaxtype == 'maxmin':
                 vmax = np.nanmax(data.values); vmin = np.nanmin(data.values)
