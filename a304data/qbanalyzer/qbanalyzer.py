@@ -14,12 +14,10 @@ class QBAnalyzer:
     QBAnalyzer 的 Docstring
 
     提供计算量子拍信号和背景信号的若干种方法
-    - 'poly': 高阶多项式拟合背景
     - 'savgol': Savitzky-Golay 滤波
-    - 'manual': 手动指定参考点构建背景
+    - 'poly': 高阶多项式拟合背景
     - 'exp': 用1-2个指数拟合背景
-    - 'fit': 扣除指数衰减背景 TODO
-    - 'fft_filter': 带通 FFT 滤波 TODO
+    - 'manual': 手动指定参考点构建背景
     """
     def __init__(self, dataset: "PPLoopDataset"):
         self.ds = dataset
@@ -216,18 +214,81 @@ class QBAnalyzer:
         self.ds.qb_data = self.ds.avg_data - bg_data
         return self.ds.qb_data, self.ds.bg_data
 
+    def svd(
+        self,
+        delay_cutoff: float = 0.5,
+        n_comp: int = 2,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        svd 的 Docstring
+        
+        gpt写的SVD，感觉没法用。
+        """
+        if n_comp < 1:
+            raise ValueError("n_comp must be >= 1.")
+
+        # === 1. 截取数据 ===
+        data_seg = self.ds.avg_data.loc[delay_cutoff:, :]
+
+        # 删除全 NaN 列
+        data_seg = data_seg.dropna(axis=1, how="all")
+
+        if data_seg.empty:
+            raise ValueError("No valid data after delay_cutoff.")
+
+        D = data_seg.values.astype(float)
+
+        # === 2. 处理 NaN / Inf ===
+        mask = ~np.isfinite(D)
+        if mask.any():
+            # 用列均值填充
+            col_mean = np.nanmean(D, axis=0)
+            D[mask] = np.take(col_mean, np.where(mask)[1])
+
+        # === 3. 删除几乎无变化的列（关键）===
+        col_std = np.std(D, axis=0)
+        valid_cols = col_std > 1e-12
+        D = D[:, valid_cols]
+        cols_kept = data_seg.columns[valid_cols]
+
+        if D.shape[1] < n_comp:
+            raise ValueError("Not enough valid columns for SVD.")
+
+        # === 4. 去均值 + 归一化 ===
+        mean = D.mean(axis=0, keepdims=True)
+        std = D.std(axis=0, keepdims=True)
+        std[std == 0] = 1.0
+
+        D0 = (D - mean) / std
+
+        # === 5. SVD（加保护）===
+        try:
+            U, S, Vt = np.linalg.svd(D0, full_matrices=False)
+        except np.linalg.LinAlgError:
+            # fallback：降低精度再试
+            U, S, Vt = np.linalg.svd(D0.astype(np.float32), full_matrices=False)
+
+        # === 6. 重构背景 ===
+        D_bg_seg = (U[:, :n_comp] * S[:n_comp]) @ Vt[:n_comp, :]
+        D_bg_seg = D_bg_seg * std + mean
+
+        # === 7. 放回完整矩阵 ===
+        bg_data = pd.DataFrame(
+            index=self.ds.delays,
+            columns=self.ds.wavelengths,
+            dtype=float,
+        )
+        bg_data.index.name = '0'
+        bg_data.loc[data_seg.index, cols_kept] = D_bg_seg
+
+        # 时间零点前外推
+        bg_data.loc[:delay_cutoff, cols_kept] = bg_data.loc[delay_cutoff, cols_kept].values
+
+        # === 8. QB 信号 ===
+        self.ds.bg_data = bg_data
+        self.ds.qb_data = self.ds.avg_data - bg_data
+        self.ds.qb_method = 'SVD'
+        return self.ds.qb_data, self.ds.bg_data
 
     # ----------------- 施工中 -----------------
-    def fit(
-        self,
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
-        pass
-
-    def fft_filter(
-        self,
-        cutoff_low: float = 0.1,
-        cutoff_high: float = 2.0,
-        width: float = 0.15
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
-        pass
 
