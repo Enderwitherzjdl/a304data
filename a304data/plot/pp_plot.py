@@ -303,7 +303,7 @@ class PPPlotTool:
         plt.colorbar(label='$\\Delta$O.D.')
         sym = self._get_symbol(self.ds.type)
         self._set_plot_style(
-            title = f'{self.ds.pump_wl} nm pump',
+            title = f'{self.ds.pump_wl} nm pump'+f' ({self.ds.qb_method})'if index=='qb' else None,
             xlabel = f'{sym['Coord']} ({sym['unit']})',
             ylabel = 'Delay (ps)',
             xlim = xlim,
