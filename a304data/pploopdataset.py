@@ -23,18 +23,24 @@ class PPLoopDataset:
     - 近红外区：建议 900~1200 nm。
 
     支持读取每一圈的原始数据。
-    - 格式一般为 {yymmdd_hhmmss_loop#.dat}
+    - 可见区的格式一般为 {'yymmdd'_'hhmmss'_loop'#'.dat}
+    - 红外区的格式一般为 {pp'yyyymmdd'.'#'.'method'.dat}
     - 可以对原始数据进行清除坏点、计算平均值等操作。
 
     支持读取 Labview 程序保存的，或本程序包保存的平均值文件。
-    - Labview 程序保存的，文件名为 {yymmdd_hhmmss_averaged.dat}
+    - Labview 程序保存的，可见区文件名为 {yymmdd_hhmmss_averaged.dat}
+    - 红外区没有自动保存的平均数据
     - 本程序包保存的，文件名为 {saved_averaged.dat}
-    - 【开发中】支持对平均值数据进行 chirp 校正。
 
-    支持数据的绘图和保存。
+    使用 ds.correct 组件进行数据的校正
+    - 支持对平均值数据进行 chirp 校正、零点校正、跳点校正。
+
+    使用 ds.plot 组件进行数据的绘图和保存。
     - 绘图时，可以指定绘图对象，可以是'avg'、loop编号以及据此构成的数组。
-    - 可以按照波长、按照延时、按照圈数绘图。【二维热图开发中】
+    - 可以按照波长、按照延时、按照圈数绘图。
     - 关键字 savefig=True 可以保存图片。
+
+    使用 ds.qb 组件进行量子拍的分析
     """
     def __init__(self, folder, wl_min, wl_max, read_averaged_only=False):
         self.folder = folder
