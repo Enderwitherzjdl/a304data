@@ -46,6 +46,7 @@ class PPLoopDataset:
         self.qb = QBAnalyzer(self)             # 挂载 量子拍qb 工具
         self.plot = PPPlotTool(self)           # 挂载 绘图plot 工具
         self.correct = PPCorrectTool(self)     # 挂载 校正correct 工具
+        self.delay_zero = 0
         # 加载数据
         self.data = []
         if read_averaged_only == False:

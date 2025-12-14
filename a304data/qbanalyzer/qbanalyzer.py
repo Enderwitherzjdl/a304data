@@ -17,7 +17,9 @@ class QBAnalyzer:
     - 'savgol': Savitzky-Golay 滤波
     - 'poly': 高阶多项式拟合背景
     - 'exp': 用1-2个指数拟合背景
-    - 'manual': 手动指定参考点构建背景
+
+    提供基于量子拍信号，做FFT得到频谱的方法
+    - 'fft': 朴素的FFT TODO
     """
     def __init__(self, dataset: "PPLoopDataset"):
         self.ds = dataset

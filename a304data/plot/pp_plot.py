@@ -278,6 +278,7 @@ class PPPlotTool:
         if index == 'avg': data = self.ds.avg_data
         elif index == 'qb': data = self.ds.qb_data
         else: raise ValueError(f"Invalid index: {index}.")
+        data.index -= self.ds.delay_zero
         if vlim is not None:
             if isinstance(vlim, (int, float)):
                 vmin, vmax = -abs(vlim), abs(vlim)

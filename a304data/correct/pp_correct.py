@@ -106,3 +106,13 @@ class PPCorrectTool:
                     count += 1
             self.ds.data[id] = data_clean
         print(f'Cleaned {count} jump points in total.')
+
+    def delay_zero(self, new_delay_zero:float):
+        """
+        设置时间零点。
+
+        Args:
+        new_delay_zero (float): 新的时间零点（相对于原始数据的绝对值）。
+        """
+        self.ds.delays -= new_delay_zero - self.ds.delay_zero
+        self.ds.delay_zero = new_delay_zero
