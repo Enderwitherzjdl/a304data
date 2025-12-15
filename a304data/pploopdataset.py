@@ -232,7 +232,7 @@ class PPLoopDataset:
         data = self.chirp_data
         chirp_delay = [] # 找出每个波长最大值对应的时间
         chirp_wavelength = [] # 不是每个波长的最大值点都有用
-        for wl in self.wavelengths:
+        for wl in data.columns.values:
             delay = float(data[wl].idxmax())
             if check_function(wl, delay):
                 chirp_delay.append(delay)
@@ -241,7 +241,7 @@ class PPLoopDataset:
 
         if plot:
             plt.scatter(chirp_wavelength, chirp_delay, color='k', s=10)
-            plt.plot(self.wavelengths, np.poly1d(self.chirp_coeffs)(self.wavelengths), color='orange', linewidth=2)
+            plt.plot(data.columns.values, np.poly1d(self.chirp_coeffs)(data.columns.values), color='orange', linewidth=2)
             # self.plot_imshow('chirp', 'RdBu_r', 'maxmin', ylim=(np.min(chirp_delay)-1, np.max(chirp_delay)+1))
             plt.show()
         return self.chirp_coeffs

@@ -2,7 +2,6 @@
 
 import numpy as np
 import pandas as pd
-from scipy.fft import fft, ifft, fftfreq
 from ..utils import get_closest_value
 
 from typing import TYPE_CHECKING
@@ -294,3 +293,22 @@ class QBAnalyzer:
 
     # ----------------- 施工中 -----------------
 
+    def fft(self, delay_range=(0.15,15), N=1000, freq_cutoff=30):
+        if not hasattr(self.ds, 'qb_data'):
+            raise ValueError(f'Calculate qb_data first!')
+        from scipy.interpolate import interp1d
+        from scipy.fft import fft, fftfreq
+        
+        t = np.linspace(*delay_range, N)
+        dt = t[1]-t[0]
+        freq = fftfreq(N, dt) * 33.35640952 # 单位是THz，默认转换为cm-1
+        self.ds.freq = freq[1:freq_cutoff]
+        
+        fft_data = pd.DataFrame(index=self.ds.freq, columns=self.ds.wavelengths, dtype=float)
+        for wl in self.ds.wavelengths:
+            # fill_value=0，可能可以用来延长时间范围，提高分辨率
+            interp_func = interp1d(self.ds.delays, self.ds.qb_data[wl], kind='linear', bounds_error=False, fill_value=0) 
+            interp_values = interp_func(t)
+            fft_values = fft(interp_values)
+            fft_data[wl] = fft_values[1:freq_cutoff]
+        self.ds.fft_data = fft_data

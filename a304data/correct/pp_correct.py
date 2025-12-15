@@ -15,7 +15,15 @@ class PPCorrectTool:
     def __init__(self, ds:"PPLoopDataset"):
         self.ds = ds
     
-    def chirp(self, chirp_dir:str, check_function=None, deg=3, plot=False):
+    def chirp(
+        self, 
+        chirp_dir: str = None, 
+        check_function = None, 
+        deg = 3, 
+        plot = False, 
+        chirp_coeffs = None,
+        ref_wl = None,
+    ):
         """
         校正数据中的 chirp。
 
@@ -24,37 +32,40 @@ class PPCorrectTool:
             check_function (lambda): 自定义chirp拟合范围函数，配置了一个默认函数。
             deg (int): chirp 多项式拟合阶数。
             plot (bool): 是否绘图显示拟合的chirp。
-
-        Returns:
-            chirp_coeffs (list): chirp 的多项式系数。
+            ref_wl (float): 校正后对齐的波长，默认为波长的蓝边，即 450 nm。
         """
         if getattr(self.ds, "chirp_corrected", False):
             print(f'Chirp correction has been done before.')
             return
-        self.ds._load_chirp_data(chirp_dir)
-        def default_check_function(wavelength, delay):
-            # 适配'~/chirp/20251025-pump-530nm-8uW-2500ps-chirp'的chirp区域检定函数
-            if delay > 0.9 or delay < -0.8:
-                return False
-            if wavelength > 620 and delay < 0.6:
-                return False
-            if wavelength > 650 and delay < 0.7:
-                return False
-            return True
-        if check_function is None:
-            check_function = default_check_function
-        self.ds.calculate_chirp(check_function, deg, plot)
-        print(f'Correcting chirp with coefficients: {self.ds.chirp_coeffs}')
+        
+        if chirp_dir is not None: # 从给定的 chirp 数据中计算
+            self.ds._load_chirp_data(chirp_dir)
+            def default_check_function(wavelength, delay):
+                # 适配'~/chirp/20251025-pump-530nm-8uW-2500ps-chirp'的chirp区域检定函数
+                if delay > 0.9 or delay < -0.8:
+                    return False
+                if wavelength > 620 and delay < 0.6:
+                    return False
+                if wavelength > 650 and delay < 0.7:
+                    return False
+                return True
+            if check_function is None:
+                check_function = default_check_function
+            self.ds.calculate_chirp(check_function, deg, plot)
+            print(f'Correcting chirp with coefficients: {self.ds.chirp_coeffs}')
+        elif chirp_coeffs is not None:
+            self.ds.chirp_coeffs = chirp_coeffs
+        else:
+            raise ValueError(f'Require chirp file or coefficients.')
+
         interpolated_data = pd.DataFrame(index=self.ds.delays, columns=self.ds.wavelengths)
         interpolated_data.index.name = '0' # 保持与原始数据格式一致
-        if hasattr(self.ds, 'chirp_coeffs'):
-            poly = np.poly1d(self.ds.chirp_coeffs)
-        else:
-            print(f'Calculate chirp coefficients first!')
-            return
+        poly = np.poly1d(self.ds.chirp_coeffs)
+        if ref_wl is None:
+            ref_wl = self.ds.wavelengths[-1]
         for wl in self.ds.wavelengths:
             interp_func = interp1d(self.ds.delays, self.ds.avg_data[wl], kind='linear', bounds_error=False, fill_value=np.nan)
-            interpolated_data[wl] = interp_func(self.ds.delays + poly(wl) - poly(self.ds.wavelengths[-1]))
+            interpolated_data[wl] = interp_func(self.ds.delays + poly(wl) - poly(ref_wl))
         self.ds.avg_data = interpolated_data
         self.ds.chirp_corrected = True
         print(f'Chirp corrected for averaged data.')

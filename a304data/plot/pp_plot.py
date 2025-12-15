@@ -41,17 +41,36 @@ class PPPlotTool:
         Get plot and naming symbols.
 
         Args:
-            datatype (str): self.ds.type, 'VIS' or 'IR'
+            datatype (str): self.ds.type, 'VIS' or 'IR' or 'wavelength' or 'wavenumber'
         
         Returns:
             symbols (dict): coord,Coord,unit,unitplain,symbol
         """
-        if datatype == 'VIS':
+        if datatype == 'VIS' or datatype == 'wavelength':
             return {'coord':'wavelength', 'Coord':'Wavelength', 'unit':'nm', 'unitplain':'nm', 'symbol':r'$\\lambda$'}
-        elif datatype == 'IR':
+        elif datatype == 'IR' or datatype == 'wavenumber':
             return {'coord':'wavenumber', 'Coord':'Wavenumber', 'unit':r'cm$^{-1}$', 'unitplain':'cm-1', 'symbol':r'\\tilde{\\nu}'}
         else:
             return None
+
+    def _get_vmin_vmax(
+        self, 
+        data, 
+        vmaxtype: Literal['maxmin', 'absmax'] = 'maxmin',
+        vlim: float | tuple[float, float] = None,
+    ) -> tuple[float, float]:
+        if vlim is not None:
+            if isinstance(vlim, (int, float)):
+                vmin, vmax = -abs(vlim), abs(vlim)
+            else:
+                vmin, vmax = vlim
+        else:
+            if vmaxtype == 'maxmin':
+                vmax = np.nanmax(data); vmin = np.nanmin(data)
+            elif vmaxtype == 'absmax':
+                vmax = np.nanmax(np.abs(data)); vmin = -vmax
+            else: raise ValueError(f"Invalide vmaxtype: {vmaxtype}.") 
+        return vmin, vmax       
 
     def at_delay(
         self, 
@@ -265,35 +284,24 @@ class PPPlotTool:
         ylim: tuple = None,
     ):
         """
-        热图版本其一：plt.imshow()。
+        使用 plt.imshow() 绘制热图。
 
         Args:
-            index ('avg','qb' | None): 绘制对象，默认为 'avg'。【以后还要支持'chirp' file】
+            index ('avg','qb' | None): 绘制对象，默认为 'avg'。
             cmap (str): 色彩映射，'bwr' 或 'RdBu_r'。
             vmaxtype ('maxmin' | 'absmax'): 最大值类型，'maxmin' 表示取最大值和最小值，'absmax' 表示取绝对值最大值。
             vlim (float | tuple[flaot,float] | None): 自定义 (vmax, vmin) 并无视 vmaxtype，默认为 None。
             xlim (tuple): x 轴范围，默认为 None。
             ylim (tuple): y 轴范围，默认为 None。
         """
-        if index == 'avg': data = self.ds.avg_data
-        elif index == 'qb': data = self.ds.qb_data
+        if index == 'avg': data = self.ds.avg_data.values
+        elif index == 'qb': data = self.ds.qb_data.values
         else: raise ValueError(f"Invalid index: {index}.")
-        data.index -= self.ds.delay_zero
-        if vlim is not None:
-            if isinstance(vlim, (int, float)):
-                vmin, vmax = -abs(vlim), abs(vlim)
-            else:
-                vmin, vmax = vlim
-        else:
-            if vmaxtype == 'maxmin':
-                vmax = np.nanmax(data.values); vmin = np.nanmin(data.values)
-            elif vmaxtype == 'absmax':
-                vmax = np.nanmax(np.abs(data.values)); vmin = -vmax
-            else: raise ValueError(f"Invalide vmaxtype: {vmaxtype}.")
+        vmin, vmax = self._get_vmin_vmax(data, vmaxtype, vlim)
         extent = [self.ds.wavelengths[0], self.ds.wavelengths[-1], self.ds.delays[0], self.ds.delays[-1]]
         plt.figure(figsize=(5,4))
         plt.imshow(
-            X = data.values,
+            X = data,
             aspect = 'auto',        # 'auto' 为拉伸，'equal' 为等比例
             origin = 'lower',
             extent = extent,
@@ -313,3 +321,47 @@ class PPPlotTool:
         )
         plt.show()
 
+    def imshow_freq(
+        self,
+        index: Literal['abs','angle','real','imag'] | None = 'abs',
+        cmap: Literal['bwr', 'RdBu_r'] = 'bwr', # 只支持红白蓝配色
+        vmaxtype: Literal['maxmin', 'absmax'] = 'maxmin', # 最大值类型
+        vlim: float | tuple[float, float] = None,
+        xlim: tuple = None,
+        ylim: tuple = None,
+    ):
+        if not hasattr(self.ds, 'fft_data'):
+            raise ValueError(f'Use ds.qb.fft() calculate fft_data first!')
+        if index == 'abs':
+            data = np.abs(self.ds.fft_data.values)
+        elif index == 'angle':
+            data = np.angle(self.ds.fft_data.values)
+        elif index == 'real':
+            data = np.real(self.ds.fft_data.values)
+        elif index == 'imag':
+            data = np.imag(self.ds.fft_data.values)
+        
+        vmin, vmax = self._get_vmin_vmax(data, vmaxtype, vlim)
+        extent = [self.ds.wavelengths[0], self.ds.wavelengths[-1], self.ds.freq[0], self.ds.freq[-1]]
+        plt.figure(figsize=(5,4))
+        plt.imshow(
+            X = data,
+            aspect = 'auto',        # 'auto' 为拉伸，'equal' 为等比例
+            origin = 'lower',
+            extent = extent,
+            cmap = cmap,
+            vmax = vmax,
+            vmin = vmin,
+        )
+        plt.colorbar(label='FFT Intensity')
+        sym_wn = self._get_symbol('wavenumber')
+        sym_wl = self._get_symbol('wavelength')
+        self._set_plot_style(
+            title = f'QB of {self.ds.pump_wl} nm pump ({self.ds.qb_method})',
+            xlabel = f'{sym_wl['Coord']} ({sym_wl['unit']})',
+            ylabel = f'{sym_wn['Coord']} ({sym_wn['unit']})',
+            xlim = xlim,
+            ylim = ylim,
+            legend = False,
+        )
+        plt.show()        
