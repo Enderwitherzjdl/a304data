@@ -100,7 +100,8 @@ class PPPlotTool:
             raise ValueError(f'目前不支持 delay 和 plot_list 同时为列表,请分开绘图。')
         if isinstance(delay, (list, tuple)):
             # 先把 delay 全部贴最近值
-            delays = [get_closest_value(d, self.ds.delays) for d in delay]
+            delays = [get_closest_value(d, self.ds.delays+self.ds.delay_zero) for d in delay]
+             # self.ds.delays是重设过零点的外部索引，需要回到数据本身的索引
 
             use_color_map = len(delays) >= 5
             if use_color_map:
