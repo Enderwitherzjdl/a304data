@@ -36,7 +36,10 @@ class PPPlotTool:
         if legend:
             plt.legend()
 
-    def _get_symbol(self, datatype:str):
+    def _get_symbol(
+        self, 
+        datatype: Literal['VIS','IR','wavelength','wavenumber'],
+    ):
         """
         Get plot and naming symbols.
 
@@ -72,6 +75,7 @@ class PPPlotTool:
             else: raise ValueError(f"Invalide vmaxtype: {vmaxtype}.") 
         return vmin, vmax       
 
+    # ================= 时域信号 =================
     def at_delay(
         self, 
         delay, 
@@ -163,7 +167,7 @@ class PPPlotTool:
             if isinstance(delay, (int, float)):
                 plt.savefig(os.path.join(self.ds.folder, f'Signal-{delay:.2f}ps.jpg'),bbox_inches='tight',dpi=300)
             else:
-                plt.savefig(os.path.join(self.ds.folder, f'Singal-selected_delays.jpg'), bbox_inches='tight', dpi=300)
+                plt.savefig(os.path.join(self.ds.folder, f'signal-selected_delays.jpg'), bbox_inches='tight', dpi=300)
         plt.show()
 
     def at_wavelength(
@@ -244,7 +248,7 @@ class PPPlotTool:
             if isinstance(wl, (int, float)):
                 plt.savefig(os.path.join(self.ds.folder,f'Signal-{wl:.0f}{sym['unitplain']}.jpg'),bbox_inches='tight',dpi=300)
             else:
-                plt.savefig(os.path.join(self.ds.folder, f'Singal-selected_{sym['coord']}s.jpg'), bbox_inches='tight', dpi=300)
+                plt.savefig(os.path.join(self.ds.folder, f'signal-selected_{sym['coord']}s.jpg'), bbox_inches='tight', dpi=300)
         plt.show()
     
     def with_loop(self, wl, delay, savefig=False, xlim=None, ylim=None):
@@ -322,6 +326,113 @@ class PPPlotTool:
         )
         plt.show()
 
+
+    # ================= 频域信号 =================
+    def at_wavenumber_freq(
+        self, 
+        wn: float | list | tuple, 
+        target: Literal['abs','angle','real','imag'] = 'abs',
+        plot_list: str = 'fft', 
+        savefig: bool = False,
+        xlim: tuple = None,
+        ylim: tuple = None,
+    ):
+        """
+        在指定频率处绘制FFT信号。
+
+        Args:
+            wn (float | list | tuple): 指定波数 (cm-1)，将自动匹配到最接近值。
+            target ('abs' | 'angle' | 'real' | 'imag'): 绘制 FFT 信号的模长/辐角/实部/虚部。
+            plot_list (str): 指定绘制内容。
+                - 'fft' 表示绘制 qb.fft 数据。
+            savefig (bool): 是否保存图片。默认为 False。
+
+        Raises:
+            ValueError: 指定的绘图对象不存在时。
+        """
+        if self.ds.fft_data is None:
+            raise ValueError(f'Use ds.qb.fft() calculate fft_data first!')
+        if isinstance(wn, (int, float)): wn_list = [wn]
+        else: wn_list = wn
+
+        sym = self._get_symbol('wavenumber')
+        for w in wn_list:
+            w = get_closest_value(w, self.ds.freqs)
+            data_slice = self.ds.fft_data.loc[w, :].values
+            if target == 'abs': data_slice = np.abs(data_slice)
+            elif target == 'angle': data_slice = np.angle(data_slice)
+            elif target == 'real': data_slice = np.real(data_slice)
+            elif target == 'imag': data_slice = np.imag(data_slice)
+            else: pass
+            plt.plot(self.ds.wavelengths, data_slice, label=f'{w:.1f} {sym['unit']}' )
+        
+        self._set_plot_style(
+            title = f'FFT QB signal at {sym['coord']} {wn:.0f} {sym['unit']}' if isinstance(wn,(int, float)) else f'FFT QB signal at selected {sym['coord']}s' ,
+            xlabel = f'{sym['Coord']} ({sym['unit']})',
+            ylabel = 'FFT Intensity (a.u.)',
+            xlim = xlim,
+            ylim = ylim,
+        )
+        if savefig:
+            if isinstance(wn, (int, float)):
+                plt.savefig(os.path.join(self.ds.folder,f'FFTQB-signal-{wn:.0f}{sym['unitplain']}.jpg'),bbox_inches='tight',dpi=300)
+            else:
+                plt.savefig(os.path.join(self.ds.folder, f'FFTQB-signal-selected_{sym['coord']}s.jpg'), bbox_inches='tight', dpi=300)
+        plt.show()
+
+    def at_wavelength_freq(
+        self, 
+        wl: float | list | tuple, 
+        target: Literal['abs','angle','real','imag'] = 'abs',
+        plot_list: str = 'fft', 
+        savefig: bool = False,
+        xlim: tuple = None,
+        ylim: tuple = None,
+    ):
+        """
+        在指定波长处绘制FFT信号。
+
+        Args:
+            wl (float | list | tuple): 指定波长 (nm)，将自动匹配到最接近值。
+            target ('abs' | 'angle' | 'real' | 'imag'): 绘制 FFT 信号的模长/辐角/实部/虚部。
+            plot_list (str): 指定绘制内容。
+                - 'fft' 表示绘制 qb.fft 数据。
+            savefig (bool): 是否保存图片。默认为 False。
+
+        Raises:
+            ValueError: 指定的绘图对象不存在时。
+        """
+        if self.ds.fft_data is None:
+            raise ValueError(f'Use ds.qb.fft() calculate fft_data first!')
+        if isinstance(wl, (int, float)): wl_list = [wl]
+        else: wl_list = wl
+
+        sym = self._get_symbol('wavelength')
+        for w in wl_list:
+            w = get_closest_value(w, self.ds.wavelengths)
+            data_slice = self.ds.fft_data.loc[:, w].values
+            if target == 'abs': data_slice = np.abs(data_slice)
+            elif target == 'angle': data_slice = np.angle(data_slice)
+            elif target == 'real': data_slice = np.real(data_slice)
+            elif target == 'imag': data_slice = np.imag(data_slice)
+            else: pass
+            plt.plot(self.ds.freqs, data_slice, label=f'{w:.0f} {sym['unit']}' )
+        
+        self._set_plot_style(
+            title = f'FFT QB signal at {sym['coord']} {wl:.0f} {sym['unit']}' if isinstance(wl,(int, float)) else f'FFT QB signal at selected {sym['coord']}s' ,
+            xlabel = f'{sym['Coord']} ({sym['unit']})',
+            ylabel = 'FFT Intensity (a.u.)',
+            xlim = xlim,
+            ylim = ylim,
+        )
+        if savefig:
+            if isinstance(wl, (int, float)):
+                plt.savefig(os.path.join(self.ds.folder,f'FFTQB-signal-{wl:.0f}{sym['unitplain']}.jpg'),bbox_inches='tight',dpi=300)
+            else:
+                plt.savefig(os.path.join(self.ds.folder, f'FFTQB-signal-selected_{sym['coord']}s.jpg'), bbox_inches='tight', dpi=300)
+        plt.show()
+
+
     def imshow_freq(
         self,
         index: Literal['abs','angle','real','imag'] | None = 'abs',
@@ -331,7 +442,7 @@ class PPPlotTool:
         xlim: tuple = None,
         ylim: tuple = None,
     ):
-        if not hasattr(self.ds, 'fft_data'):
+        if self.ds.fft_data is None:
             raise ValueError(f'Use ds.qb.fft() calculate fft_data first!')
         if index == 'abs':
             data = np.abs(self.ds.fft_data.values)
@@ -343,7 +454,7 @@ class PPPlotTool:
             data = np.imag(self.ds.fft_data.values)
         
         vmin, vmax = self._get_vmin_vmax(data, vmaxtype, vlim)
-        extent = [self.ds.wavelengths[0], self.ds.wavelengths[-1], self.ds.freq[0], self.ds.freq[-1]]
+        extent = [self.ds.wavelengths[0], self.ds.wavelengths[-1], self.ds.freqs[0], self.ds.freqs[-1]]
         plt.figure(figsize=(5,4))
         plt.imshow(
             X = data,
@@ -354,7 +465,7 @@ class PPPlotTool:
             vmax = vmax,
             vmin = vmin,
         )
-        plt.colorbar(label='FFT Intensity')
+        plt.colorbar(label='FFT Intensity (a.u.)')
         sym_wn = self._get_symbol('wavenumber')
         sym_wl = self._get_symbol('wavelength')
         self._set_plot_style(

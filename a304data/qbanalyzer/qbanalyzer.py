@@ -22,7 +22,8 @@ class QBAnalyzer:
     """
     def __init__(self, dataset: "PPLoopDataset"):
         self.ds = dataset
-    
+
+    # ================= QB 区 =================    
     # ----------------- 可用的 -----------------
     def savgol(
         self,
@@ -293,22 +294,35 @@ class QBAnalyzer:
 
     # ----------------- 施工中 -----------------
 
-    def fft(self, delay_range=(0.15,15), N=1000, freq_cutoff=30):
-        if not hasattr(self.ds, 'qb_data'):
+
+
+
+
+    # ================= FFT 区 =================
+
+    def fft(self, delay_range=(0.15,15), N=1000):
+        """
+        对量子拍做 FFT，获取振动的频率分布。
+
+        Args:
+            delay_range (tuple[float,float]): 做 FFT 的时间区间。
+            N (int): 采样点数，别太小就行。
+        """
+        if self.ds.qb_data is None:
             raise ValueError(f'Calculate qb_data first!')
         from scipy.interpolate import interp1d
         from scipy.fft import fft, fftfreq
         
         t = np.linspace(*delay_range, N)
         dt = t[1]-t[0]
-        freq = fftfreq(N, dt) * 33.35640952 # 单位是THz，默认转换为cm-1
-        self.ds.freq = freq[1:freq_cutoff]
+        freqs = fftfreq(N, dt) * 33.35640952 # 单位是THz，默认转换为cm-1
+        self.ds.freqs = freqs[:(N+1)>>1] # 只保留非负频率
         
-        fft_data = pd.DataFrame(index=self.ds.freq, columns=self.ds.wavelengths, dtype=float)
+        fft_data = pd.DataFrame(index=self.ds.freqs, columns=self.ds.wavelengths, dtype=float)
         for wl in self.ds.wavelengths:
             # fill_value=0，可能可以用来延长时间范围，提高分辨率
             interp_func = interp1d(self.ds.delays, self.ds.qb_data[wl], kind='linear', bounds_error=False, fill_value=0) 
             interp_values = interp_func(t)
-            fft_values = fft(interp_values)
-            fft_data[wl] = fft_values[1:freq_cutoff]
+            fft_values = fft(interp_values) # norm='forward'or'ortho'?
+            fft_data[wl] = fft_values[:(N+1)>>1]
         self.ds.fft_data = fft_data

@@ -65,6 +65,12 @@ class PPLoopDataset:
         else:
             self.delays = self.avg_data.index.values
             self.wavelengths = self.avg_data.columns.values
+        # 初始化
+        self.qb_data = None
+        self.bg_data = None
+        self.qb_method = None
+        self.fft_data = None
+        self.freqs = None
 
     def _extract_pump_wl(self, path: str) -> int | None:
         s = path.lower()
