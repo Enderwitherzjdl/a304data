@@ -355,7 +355,8 @@ class PPPlotTool:
         if isinstance(wn, (int, float)): wn_list = [wn]
         else: wn_list = wn
 
-        sym = self._get_symbol('wavenumber')
+        wn_sym = self._get_symbol('wavenumber')
+        wl_sym = self._get_symbol('wavelength')
         for w in wn_list:
             w = get_closest_value(w, self.ds.freqs)
             data_slice = self.ds.fft_data.loc[w, :].values
@@ -364,21 +365,20 @@ class PPPlotTool:
             elif target == 'real': data_slice = np.real(data_slice)
             elif target == 'imag': data_slice = np.imag(data_slice)
             else: pass
-            plt.plot(self.ds.wavelengths, data_slice, label=f'{w:.1f} {sym['unit']}' )
+            plt.plot(self.ds.wavelengths, data_slice, label=f'{w:.1f} {wn_sym['unit']}' )
         
-        sym = self._get_symbol('wavelength')
         self._set_plot_style(
-            title = f'FFT QB signal at {sym['coord']} {wn:.0f} {sym['unit']}' if isinstance(wn,(int, float)) else f'FFT QB signal at selected {sym['coord']}s' ,
-            xlabel = f'{sym['Coord']} ({sym['unit']})',
+            title = f'FFT QB signal at {wn_sym['coord']} {wn:.0f} {wn_sym['unit']}' if isinstance(wn,(int, float)) else f'FFT QB signal at selected {wn_sym['coord']}s' ,
+            xlabel = f'{wl_sym['Coord']} ({wl_sym['unit']})',
             ylabel = 'FFT Intensity (a.u.)',
             xlim = xlim,
             ylim = ylim,
         )
         if savefig:
             if isinstance(wn, (int, float)):
-                plt.savefig(os.path.join(self.ds.folder,f'FFTQB-signal-{wn:.0f}{sym['unitplain']}.jpg'),bbox_inches='tight',dpi=300)
+                plt.savefig(os.path.join(self.ds.folder,f'FFTQB-signal-{wn:.0f}{wn_sym['unitplain']}.jpg'),bbox_inches='tight',dpi=300)
             else:
-                plt.savefig(os.path.join(self.ds.folder, f'FFTQB-signal-selected_{sym['coord']}s.jpg'), bbox_inches='tight', dpi=300)
+                plt.savefig(os.path.join(self.ds.folder, f'FFTQB-signal-selected_{wn_sym['coord']}s.jpg'), bbox_inches='tight', dpi=300)
         plt.show()
 
     def at_wavelength_freq(
@@ -408,7 +408,8 @@ class PPPlotTool:
         if isinstance(wl, (int, float)): wl_list = [wl]
         else: wl_list = wl
 
-        sym = self._get_symbol('wavelength')
+        wn_sym = self._get_symbol('wavenumber')
+        wl_sym = self._get_symbol('wavelength')
         for w in wl_list:
             w = get_closest_value(w, self.ds.wavelengths)
             data_slice = self.ds.fft_data.loc[:, w].values
@@ -417,21 +418,20 @@ class PPPlotTool:
             elif target == 'real': data_slice = np.real(data_slice)
             elif target == 'imag': data_slice = np.imag(data_slice)
             else: pass
-            plt.plot(self.ds.freqs, data_slice, label=f'{w:.0f} {sym['unit']}' )
+            plt.plot(self.ds.freqs, data_slice, label=f'{w:.0f} {wl_sym['unit']}' )
         
-        sym = self._get_symbol('wavenumber')
         self._set_plot_style(
-            title = f'FFT QB signal at {sym['coord']} {wl:.0f} {sym['unit']}' if isinstance(wl,(int, float)) else f'FFT QB signal at selected {sym['coord']}s' ,
-            xlabel = f'{sym['Coord']} ({sym['unit']})',
+            title = f'FFT QB signal at {wl_sym['coord']} {wl:.0f} {wl_sym['unit']}' if isinstance(wl,(int, float)) else f'FFT QB signal at selected {wl_sym['coord']}s' ,
+            xlabel = f'{wn_sym['Coord']} ({wn_sym['unit']})',
             ylabel = 'FFT Intensity (a.u.)',
             xlim = xlim,
             ylim = ylim,
         )
         if savefig:
             if isinstance(wl, (int, float)):
-                plt.savefig(os.path.join(self.ds.folder,f'FFTQB-signal-{wl:.0f}{sym['unitplain']}.jpg'),bbox_inches='tight',dpi=300)
+                plt.savefig(os.path.join(self.ds.folder,f'FFTQB-signal-{wl:.0f}{wl_sym['unitplain']}.jpg'),bbox_inches='tight',dpi=300)
             else:
-                plt.savefig(os.path.join(self.ds.folder, f'FFTQB-signal-selected_{sym['coord']}s.jpg'), bbox_inches='tight', dpi=300)
+                plt.savefig(os.path.join(self.ds.folder, f'FFTQB-signal-selected_{wl_sym['coord']}s.jpg'), bbox_inches='tight', dpi=300)
         plt.show()
 
 
