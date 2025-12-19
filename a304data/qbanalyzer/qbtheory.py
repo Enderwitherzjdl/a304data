@@ -3,26 +3,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class QBTheory:
-    def gs_ho_ef(aq=0.02, S=0.45, gamma=5, weg=3, w0=1, cutoff=10, p=1,w=np.linspace(-20,20,1001)):
+    def gs_ho_ef(aq=0.02, S=0.45, gamma=2000, weg=626, w0=41, cutoff=10, p=1,w=np.linspace(450,750,1000)):
         """
         基于等频率(ef)谐振子(ho)计算基态(gs)量子拍强度谱。
         
         Args:
             aq (float): α*q0, α = dμ/dq, q0 = sqrt{hbar/(m_eff * ω0)}.
             S (float): Huang-Rhys 因子.
-            gamma (float): 退相干速率/激发态寿命倒数 γ。
-            weg (float): 跃迁频率 ω_eg.
-            w0 (float): 振动频率 ω0, ω_nm = ω_eg + (n-m) * ω0.
+            gamma (float): 退相干速率/激发态寿命倒数 γ (in cm-1)。
+            weg (float): 跃迁频率 ω_eg (in nm).
+            w0 (float): 振动频率 ω0, ω_nm = ω_eg + (n-m) * ω0 (in cm-1).
             cutoff (int): 求和的截断，运算涉及阶乘不要设太大。
             p (int): 基频 p=1, 泛频 p=2。
-            w (np.NDArray): 波长范围。
+            w (np.NDArray): 波长范围 (in nm)。
         
         Returns:
             M (np.NDArray): 计算的量子拍谱。
         """
+        # 单位统一，从 nm 切换至 cm-1
+        weg = 1e7 / weg 
+        w = 1e7 / w
 
         # 计算 A_{n,m}(S)
-        
         fac = np.ones(cutoff)
         for i in range(1,cutoff):
             fac[i] = fac[i-1]*i
@@ -60,22 +62,24 @@ class QBTheory:
         return M
     
     # 生成等频率harmonic的ES-QB谱
-    def es_ho_ef(S=0.45, gamma=5, weg=3, w0=1, cutoff=10, p=1,w=np.linspace(-20,20,1001)):
+    def es_ho_ef(S=0.45, gamma=2000, weg=626, w0=41, cutoff=10, p=1,w=np.linspace(450,750,1000)):
         """
         基于等频率(ef)谐振子(ho)计算激发态(es)量子拍强度谱。
         
         Args:
             S (float): Huang-Rhys 因子.
-            gamma (float): 退相干速率/激发态寿命倒数 γ。
-            weg (float): 跃迁频率 ω_eg.
-            w0 (float): 振动频率 ω0, ω_nm = ω_eg + (n-m) * ω0.
+            gamma (float): 退相干速率/激发态寿命倒数 γ (in cm-1)。
+            weg (float): 跃迁频率 ω_eg (in nm).
+            w0 (float): 振动频率 ω0, ω_nm = ω_eg + (n-m) * ω0 (in cm-1).
             cutoff (int): 求和的截断，运算涉及阶乘不要设太大。
             p (int): 基频 p=1, 泛频 p=2。
-            w (np.NDArray): 波长范围。
+            w (np.NDArray): 波长范围 (in nm)。
         
         Returns:
             M (np.NDArray): 计算的量子拍谱。
         """
+        weg = 1e7/weg # 从 nm 切换至 cm-1
+
         fac = np.ones(cutoff)
         for i in range(1,cutoff):
             fac[i] = fac[i-1]*i

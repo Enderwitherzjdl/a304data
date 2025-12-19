@@ -366,6 +366,7 @@ class PPPlotTool:
             else: pass
             plt.plot(self.ds.wavelengths, data_slice, label=f'{w:.1f} {sym['unit']}' )
         
+        sym = self._get_symbol('wavelength')
         self._set_plot_style(
             title = f'FFT QB signal at {sym['coord']} {wn:.0f} {sym['unit']}' if isinstance(wn,(int, float)) else f'FFT QB signal at selected {sym['coord']}s' ,
             xlabel = f'{sym['Coord']} ({sym['unit']})',
@@ -418,6 +419,7 @@ class PPPlotTool:
             else: pass
             plt.plot(self.ds.freqs, data_slice, label=f'{w:.0f} {sym['unit']}' )
         
+        sym = self._get_symbol('wavenumber')
         self._set_plot_style(
             title = f'FFT QB signal at {sym['coord']} {wl:.0f} {sym['unit']}' if isinstance(wl,(int, float)) else f'FFT QB signal at selected {sym['coord']}s' ,
             xlabel = f'{sym['Coord']} ({sym['unit']})',
