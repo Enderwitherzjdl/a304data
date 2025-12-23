@@ -68,16 +68,16 @@ class QBAnalyzer:
         Returns:
             self.ds.qb_data, self.ds.bg_data (pd.DataFrame, pd.DataFrame): 拟合的量子拍数据和背景数据。
         """
-        bg_data = pd.DataFrame(index=self.ds.delays, columns=self.ds.wavelengths, dtype=float)
+        bg_data = pd.DataFrame(index=self.ds.default_delays, columns=self.ds.wavelengths, dtype=float)
         bg_data.index.name = '0'
 
         for wl in self.ds.wavelengths:
-            data_segment = self.ds.avg_data.loc[delay_cutoff: , wl].dropna()
+            data_segment = self.ds.avg_data.loc[delay_cutoff + self.ds.delay_zero: , wl].dropna()
             if len(data_segment) < 3:
                 bg_data[wl] = np.nan
                 continue
             fit_coeffs = np.polyfit(data_segment.index.values, data_segment.values, deg=deg)
-            bg_data[wl] = np.poly1d(fit_coeffs)(self.ds.delays)
+            bg_data[wl] = np.poly1d(fit_coeffs)(self.ds.default_delays)
         
         self.ds.bg_data = bg_data
         self.ds.qb_data = self.ds.avg_data - bg_data
@@ -113,7 +113,7 @@ class QBAnalyzer:
         if n_exp >= 3:
             print(f'Warning: n_exp > 3 may cause physical errors!')
 
-        bg_data = pd.DataFrame(index=self.ds.delays, columns=self.ds.wavelengths, dtype=float)
+        bg_data = pd.DataFrame(index=self.ds.default_delays, columns=self.ds.wavelengths, dtype=float)
         bg_data.index.name = '0'
 
         def _exp_func_factory(n):
@@ -151,7 +151,7 @@ class QBAnalyzer:
         # === 主循环 ===
         last_p0 = None
         for wl in self.ds.wavelengths:
-            data_segment = self.ds.avg_data.loc[delay_cutoff:, wl].dropna()
+            data_segment = self.ds.avg_data.loc[delay_cutoff + self.ds.delay_zero:, wl].dropna()
             if len(data_segment) < 2 * n_exp + 1:
                 bg_data[wl] = np.nan
                 continue
@@ -175,7 +175,7 @@ class QBAnalyzer:
                     continue
             if best_params is not None:
                 last_p0 = best_params
-                bg_data[wl] = exp_func(self.ds.delays, *best_params)
+                bg_data[wl] = exp_func(self.ds.default_delays, *best_params)
             else:
                 bg_data[wl] = np.nan
 
@@ -202,12 +202,12 @@ class QBAnalyzer:
             self.ds.qb_data, self.ds.bg_data (pd.DataFrame, pd.DataFrame): 拟合的量子拍数据和背景数据。
         """
         m_wl = get_closest_value(ref_wl, self.ds.wavelengths)
-        m_delay = get_closest_value(ref_delay, self.ds.delays)
-        bg_data = pd.DataFrame(index=self.ds.delays, columns=self.ds.wavelengths, dtype=float)
+        m_delay = get_closest_value(ref_delay + self.ds.delay_zero, self.ds.default_delays)
+        bg_data = pd.DataFrame(index=self.ds.default_delays, columns=self.ds.wavelengths, dtype=float)
         bg_data.index.name = '0'
 
         for wl in self.ds.wavelengths:
-            for delay in self.ds.delays:
+            for delay in self.ds.default_delays:
                 bg_data.at[delay, wl] = (
                     self.ds.avg_data.at[m_delay, wl] * self.ds.avg_data.at[delay, m_wl]
                     / self.ds.avg_data.at[m_delay, m_wl]
@@ -230,7 +230,7 @@ class QBAnalyzer:
             raise ValueError("n_comp must be >= 1.")
 
         # === 1. 截取数据 ===
-        data_seg = self.ds.avg_data.loc[delay_cutoff:, :]
+        data_seg = self.ds.avg_data.loc[delay_cutoff + self.ds.delay_zero:, :]
 
         # 删除全 NaN 列
         data_seg = data_seg.dropna(axis=1, how="all")
@@ -276,7 +276,7 @@ class QBAnalyzer:
 
         # === 7. 放回完整矩阵 ===
         bg_data = pd.DataFrame(
-            index=self.ds.delays,
+            index=self.ds.default_delays,
             columns=self.ds.wavelengths,
             dtype=float,
         )
@@ -313,7 +313,7 @@ class QBAnalyzer:
         from scipy.interpolate import interp1d
         from scipy.fft import fft, fftfreq
         
-        t = np.linspace(*delay_range, N)
+        t = np.linspace(delay_range[0]+self.ds.delay_zero, delay_range[1]+self.ds.delay_zero, N)
         dt = t[1]-t[0]
         freqs = fftfreq(N, dt) * 33.35640952 # 单位是THz，默认转换为cm-1
         self.ds.freqs = freqs[:(N+1)>>1] # 只保留非负频率
@@ -321,7 +321,7 @@ class QBAnalyzer:
         fft_data = pd.DataFrame(index=self.ds.freqs, columns=self.ds.wavelengths, dtype=float)
         for wl in self.ds.wavelengths:
             # fill_value=0，可能可以用来延长时间范围，提高分辨率
-            interp_func = interp1d(self.ds.delays, self.ds.qb_data[wl], kind='linear', bounds_error=False, fill_value=0) 
+            interp_func = interp1d(self.ds.default_delays, self.ds.qb_data[wl], kind='linear', bounds_error=False, fill_value=0) 
             interp_values = interp_func(t)
             fft_values = fft(interp_values) # norm='forward'or'ortho'?
             fft_data[wl] = fft_values[:(N+1)>>1]

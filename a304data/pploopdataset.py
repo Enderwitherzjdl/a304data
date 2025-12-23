@@ -53,24 +53,26 @@ class PPLoopDataset:
         self.plot = PPPlotTool(self)           # 挂载 绘图plot 工具
         self.correct = PPCorrectTool(self)     # 挂载 校正correct 工具
         self.delay_zero = 0
+        # 初始化
+        self.avg_data = None
+        self.qb_data = None
+        self.bg_data = None
+        self.qb_method = None
+        self.fft_data = None
+        self.freqs = None
         # 加载数据
         self.data = []
         if read_averaged_only == False:
             self._load_original_data()
         self._load_averaged_data()
         # 获取数据集基本信息
-        if self.data:
-            self.delays = self.data[0].index.values
-            self.wavelengths = self.data[0].columns.values
-        else:
+        if self.avg_data is not None:
             self.delays = self.avg_data.index.values
             self.wavelengths = self.avg_data.columns.values
-        # 初始化
-        self.qb_data = None
-        self.bg_data = None
-        self.qb_method = None
-        self.fft_data = None
-        self.freqs = None
+        else:
+            self.delays = self.data[0].index.values
+            self.wavelengths = self.data[0].columns.values
+        self.default_delays = self.delays.copy()
 
     def _extract_pump_wl(self, path: str) -> int | None:
         s = path.lower()

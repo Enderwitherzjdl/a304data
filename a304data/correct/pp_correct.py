@@ -58,14 +58,14 @@ class PPCorrectTool:
         else:
             raise ValueError(f'Require chirp file or coefficients.')
 
-        interpolated_data = pd.DataFrame(index=self.ds.delays, columns=self.ds.wavelengths)
+        interpolated_data = pd.DataFrame(index=self.ds.default_delays, columns=self.ds.wavelengths)
         interpolated_data.index.name = '0' # 保持与原始数据格式一致
         poly = np.poly1d(self.ds.chirp_coeffs)
         if ref_wl is None:
             ref_wl = self.ds.wavelengths[-1]
-        for wl in self.ds.wavelengths:
-            interp_func = interp1d(self.ds.delays, self.ds.avg_data[wl], kind='linear', bounds_error=False, fill_value=np.nan)
-            interpolated_data[wl] = interp_func(self.ds.delays + poly(wl) - poly(ref_wl))
+        for wl in self.ds.wavelengths: # 插值应使用原数据，即 self.ds.default_delays
+            interp_func = interp1d(self.ds.default_delays, self.ds.avg_data[wl], kind='linear', bounds_error=False, fill_value=np.nan)
+            interpolated_data[wl] = interp_func(self.ds.default_delays + poly(wl) - poly(ref_wl))
         self.ds.avg_data = interpolated_data
         self.ds.chirp_corrected = True
         print(f'Chirp corrected for averaged data.')
@@ -105,6 +105,7 @@ class PPCorrectTool:
             # 第一行和最后一行无法处理
             for i in range(1, len(self.ds.delays)-1):
                 if delay_range is not None:
+                    # delay_range 和 self.ds.delays 均受用户控制，应保持一致
                     if not (delay_range[0] <= self.ds.delays[i] <= delay_range[1]):
                         continue
                 curr_val = self.ds.data[id].iloc[i][wl]
@@ -120,7 +121,7 @@ class PPCorrectTool:
 
     def delay_zero(self, new_delay_zero:float):
         """
-        设置时间零点。
+        设置时间零点，调整 ds.delays 而不改变 ds.default_delays。
 
         Args:
         new_delay_zero (float): 新的时间零点（相对于原始数据的绝对值）。

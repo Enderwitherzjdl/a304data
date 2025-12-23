@@ -104,8 +104,7 @@ class PPPlotTool:
             raise ValueError(f'目前不支持 delay 和 plot_list 同时为列表,请分开绘图。')
         if isinstance(delay, (list, tuple)):
             # 先把 delay 全部贴最近值
-            delays = [get_closest_value(d, self.ds.delays+self.ds.delay_zero) for d in delay]
-             # self.ds.delays是重设过零点的外部索引，需要回到数据本身的索引
+            delays = [get_closest_value(d + self.ds.delay_zero, self.ds.default_delays) for d in delay]
 
             use_color_map = len(delays) >= 5
             if use_color_map:
@@ -120,18 +119,18 @@ class PPPlotTool:
                     plt.plot(
                         self.ds.wavelengths,
                         self.ds.avg_data.loc[d, :],
-                        label=f'{d:.1f} ps',
+                        label=f'{d - self.ds.delay_zero :.1f} ps',
                         color=c
                     )
                 else:
                     plt.plot(
                         self.ds.wavelengths,
                         self.ds.data[id-1].loc[d, :],
-                        label=f'{d:.1f} ps',
+                        label=f'{d - self.ds.delay_zero :.1f} ps',
                         color=c
                     )
         else:
-            delay = get_closest_value(delay, self.ds.delays)
+            delay = get_closest_value(delay + self.ds.delay_zero, self.ds.default_delays)
             if isinstance(plot_list, (int, str)):
                 plot_list = [plot_list]
             elif not isinstance(plot_list, (list, tuple)):
@@ -157,7 +156,7 @@ class PPPlotTool:
         
         sym = self._get_symbol(self.ds.type)
         self._set_plot_style(
-            title = f'Signal at {delay:.2f} ps' if isinstance(delay,(int, float)) else f'Signal at selected delays' ,
+            title = f'Signal at {delay - self.ds.delay_zero:.2f} ps' if isinstance(delay,(int, float)) else f'Signal at selected delays' ,
             xlabel = f'{sym['Coord']} ({sym['unit']})' ,
             ylabel = '$\\Delta$O.D.',
             xlim = xlim,
@@ -165,7 +164,7 @@ class PPPlotTool:
         )
         if savefig:
             if isinstance(delay, (int, float)):
-                plt.savefig(os.path.join(self.ds.folder, f'Signal-{delay:.2f}ps.jpg'),bbox_inches='tight',dpi=300)
+                plt.savefig(os.path.join(self.ds.folder, f'Signal-{delay - self.ds.delay_zero :.2f}ps.jpg'),bbox_inches='tight',dpi=300)
             else:
                 plt.savefig(os.path.join(self.ds.folder, f'signal-selected_delays.jpg'), bbox_inches='tight', dpi=300)
         plt.show()
@@ -202,7 +201,7 @@ class PPPlotTool:
         if isinstance(wl, (list, tuple)):
             for w in wl:
                 w = get_closest_value(w, self.ds.wavelengths)
-                if plot_list == 'avg':
+                if plot_list == 'avg': # 用户看到的应是重设过的 delays 作为坐标轴
                     plt.plot(self.ds.delays, self.ds.avg_data.loc[:, w], label=f'{w:.0f} {sym['unit']}')
                 else:
                     plt.plot(self.ds.delays, self.ds.data[id-1].loc[:, w], label=f'{w:.0f} {sym['unit']}')
@@ -261,7 +260,7 @@ class PPPlotTool:
             savefig (bool, optional): 是否保存图片。默认为 False。
         """
         wl = get_closest_value(wl, self.ds.wavelengths)
-        delay = get_closest_value(delay, self.ds.delays)
+        delay = get_closest_value(delay + self.ds.delay_zero, self.ds.default_delays)
         intensities = []
         for d in self.ds.data:
             intensities.append(d.loc[delay, wl])
@@ -269,14 +268,14 @@ class PPPlotTool:
         
         sym = self._get_symbol(self.ds.type)
         self._set_plot_style(
-            title = f'Intensity at {sym['symbol']}={wl:.0f} {sym['unit']}, $\\tau$={delay:.2f} ps',
+            title = f'Intensity at {sym['symbol']}={wl:.0f} {sym['unit']}, $\\tau$={delay - self.ds.delay_zero :.2f} ps',
             xlabel = 'Loop number',
             ylabel = '$\\Delta$O.D.',
             xlim = xlim,
             ylim = ylim,
         )
         if savefig:
-            plt.savefig(os.path.join(self.ds.folder,f'SignalVsTime-{wl:.0f}{sym['unitplain']}-{delay:.2f}ps.jpg'),bbox_inches='tight',dpi=300)
+            plt.savefig(os.path.join(self.ds.folder,f'SignalVsTime-{wl:.0f}{sym['unitplain']}-{delay - self.ds.delay_zero :.2f}ps.jpg'),bbox_inches='tight',dpi=300)
         plt.show()
 
     def imshow(
@@ -303,6 +302,7 @@ class PPPlotTool:
         elif index == 'qb': data = self.ds.qb_data.values
         else: raise ValueError(f"Invalid index: {index}.")
         vmin, vmax = self._get_vmin_vmax(data, vmaxtype, vlim)
+        # 用户看到的应是重设过的坐标轴 self.ds.delays
         extent = [self.ds.wavelengths[0], self.ds.wavelengths[-1], self.ds.delays[0], self.ds.delays[-1]]
         plt.figure(figsize=(5,4))
         plt.imshow(
