@@ -40,8 +40,24 @@ def load_uvvis_data(filename):
         filename (str): 数据文件路径。
 
     Returns:
-        pd.DataFrame: 读取的完整数据表，包含'Wavelength'和'Work'。
+        pd.DataFrame: 读取的完整数据表，包含 'Wavelength' 和 'Work'。
     """
     data = pd.read_table(filename, sep='\\s+')  # '\\s+'匹配任意空白字符
     return data
+
+def load_UV3600Plus_data(filename, wl_lim=None):
+    """
+    从岛津 UV3600Plus 产生的文件中读取 UV-Vis 数据，包含 'Wavelength' 和 'Absorption'。
+
+    Args:
+        filename (str): 数据文件路径。
     
+    Returns:
+        pd.DataFrame: 读取的完整数据表，包含 'Wavelength' 和 'Absorbance'（格式统一）。
+    """
+    data = pd.read_csv(filename, delimiter=',')
+    data.columns = ['Wavelength', 'Absorbance']
+    if wl_lim is not None:
+        data = data[(data['Wavelength'] >= wl_lim[0]) & (data['Wavelength'] <= wl_lim[1])]
+        data = data.reset_index(drop=True)
+    return data

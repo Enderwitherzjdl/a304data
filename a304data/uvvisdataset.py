@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from .io import load_uvvis_data
+from .io import load_uvvis_data, load_UV3600Plus_data
 from .utils import get_closest_value
 from scipy.signal import find_peaks
 
@@ -15,7 +15,7 @@ class UVVisDataset:
     文件名中含有 'bg' 或 'background' 的视为背景文件，其余为光谱文件。
     背景文件应有且仅有一个，光谱文件至少一个。
     """
-    def __init__(self, folder):
+    def __init__(self, folder, wl_lim = None):
         """
         初始化 UVVisDataset 实例，并加载原始数据。
 
@@ -23,7 +23,8 @@ class UVVisDataset:
             folder (str): 数据文件所在的目录路径。
         """
         self.folder = folder
-        self._load_original_data()
+        if not self._load_original_data():
+            self._load_UV3600Plus_data(wl_lim)
 
     ########## Load Data ##########
     def _load_original_data(self):
@@ -33,6 +34,8 @@ class UVVisDataset:
         在目录中查找文件名包含 'FX2000_FX2K243001' 的文件。
         其中，文件名包含 'bg' 或 'background' 的被视为背景文件，
         其他文件视为光谱文件。
+        如果目录没有 'bg' 或 'background' 文件，可能是分析测试中心的岛津 UV3600Plus 产生的数据，
+        则调用 load_UV3600Plus_data 方法进行加载。
 
         Raises:
             ValueError: 若未找到或找到多个背景文件，或未找到光谱文件。
@@ -46,7 +49,7 @@ class UVVisDataset:
                 else:
                     file_list.append(file)
         if len(bg_file_list)!= 1:
-            raise ValueError('There should be exactly one background file in the folder')
+            return False
         if len(file_list) < 1:
             raise ValueError('There should be at least one UVVis data file in the folder')
         self.bg_file = bg_file_list[0]
@@ -56,7 +59,22 @@ class UVVisDataset:
         for file in self.uvvis_files:
             self.uvvis_data.append(load_uvvis_data(os.path.join(self.folder, file)))
         self.uvvis_num = len(self.uvvis_data)
-        
+        self.wavelengths = self.bg_data['Wavelength'].values
+        return True
+
+    def _load_UV3600Plus_data(self, wl_lim = None):
+        """
+        加载分析测试中心的岛津 UV3600Plus 产生的数据文件。
+        """
+        self.bg_data = None # 无需背景数据
+        self.uvvis_data = []
+        for file in os.listdir(self.folder):
+            if file.endswith('.txt') or file.endswith('.dat'):
+                self.uvvis_data.append(load_UV3600Plus_data(os.path.join(self.folder, file), wl_lim))
+        self.uvvis_num = len(self.uvvis_data)
+        self.wavelengths = self.uvvis_data[0]['Wavelength'].values
+        return True
+
     ########## Calculate Data ##########
     def calculate_absorbance(self):
         """
@@ -67,6 +85,9 @@ class UVVisDataset:
 
         结果存储在每个光谱数据的 'Absorbance' 列中。
         """
+        if self.bg_data is None:
+            print('No background data available. Cannot calculate absorbance.')
+            return
         for data in self.uvvis_data:
             data['Absorbance'] = -np.log10(data['Work']) + np.log10(self.bg_data['Work'])
         # 按吸光度最大值归一化
@@ -143,9 +164,9 @@ class UVVisDataset:
             except TypeError:
                 raise TypeError('Index should be int, list or tuple.')
         for id in index:
-            plt.plot(self.bg_data['Wavelength'], self.uvvis_data[id-1]['Absorbance'])
-        if wl_min is None: wl_min = self.bg_data['Wavelength'].min()
-        if wl_max is None: wl_max = self.bg_data['Wavelength'].max()
+            plt.plot(self.wavelengths, self.uvvis_data[id-1]['Absorbance'])
+        if wl_min is None: wl_min = self.wavelengths.min()
+        if wl_max is None: wl_max = self.wavelengths.max()
         # 标峰
         if hasattr(self, 'peaks') and self.peaks is not None and len(self.peaks) > 0:
             data = self.uvvis_data[0]  # 取出唯一的数据集
@@ -197,12 +218,11 @@ class UVVisDataset:
                 raise TypeError('Index should be int, list or tuple.')
         for id in index:
             if abs:
-                plt.plot(self.bg_data['Wavelength'], np.abs(self.uvvis_data[id-1]['dAbsorbance']))
+                plt.plot(self.wavelengths, np.abs(self.uvvis_data[id-1]['dAbsorbance']))
             else:
-                plt.plot(self.bg_data['Wavelength'], self.uvvis_data[id-1]['dAbsorbance'])
-        if wl_min is None: wl_min = self.bg_data['Wavelength'].min()
-        if wl_max is None: wl_max = self.bg_data['Wavelength'].max()        
-
+                plt.plot(self.wavelengths, self.uvvis_data[id-1]['dAbsorbance'])
+        if wl_min is None: wl_min = self.wavelengths.min()
+        if wl_max is None: wl_max = self.wavelengths.max()        
         plt.xlim(wl_min, wl_max)
         plt.xlabel('Wavelength (nm)', fontsize=14)
         plt.ylabel('Absorbance Derivative', fontsize=14)
@@ -220,9 +240,12 @@ class UVVisDataset:
             wl_max (float | None): x 轴最大波长。
             savefig (bool): 是否保存图像文件。
         """
-        if wl_min is None: wl_min = self.bg_data['Wavelength'].min()
-        if wl_max is None: wl_max = self.bg_data['Wavelength'].max()
-        plt.plot(self.bg_data['Wavelength'], self.bg_data['Work'])
+        if self.bg_data is None:
+            print('No background data available.')
+            return
+        if wl_min is None: wl_min = self.wavelengths.min()
+        if wl_max is None: wl_max = self.wavelengths.max()
+        plt.plot(self.wavelengths, self.bg_data['Work'])
         plt.xlim(wl_min, wl_max)
         plt.xlabel('Wavelength (nm)', fontsize=14)
         plt.ylabel('Work', fontsize=14)
