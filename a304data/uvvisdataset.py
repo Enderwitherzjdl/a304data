@@ -105,6 +105,15 @@ class UVVisDataset:
                             wlen=wlen, rel_height=rel_height, plateau_size=plateau_size)
         self.peaks = list(absorb.index[peaks])
 
+    def calculate_derivative(self):
+        """
+        计算吸光度对波长的一阶导数 dA/dλ
+        """
+        for data in self.uvvis_data:
+            wl = data['Wavelength'].values
+            abs_ = data['Absorbance'].values
+            data['dAbsorbance'] = np.gradient(abs_, wl)
+
     ########## Plot Data ##########
     def plot_uvvis(self, index=None, wl_min=None, wl_max=None, savefig=False):
         """
@@ -142,6 +151,8 @@ class UVVisDataset:
             data = self.uvvis_data[0]  # 取出唯一的数据集
             coeff_left = 0.105; coeff_right = 0.01; coeff_len = 0.095
             for peak_index in self.peaks:
+                if data['Wavelength'].iloc[peak_index] < wl_min or data['Wavelength'].iloc[peak_index] > wl_max:
+                    continue
                 plt.vlines(data['Wavelength'].iloc[peak_index], data['Absorbance'].iloc[peak_index]+0.01, 1.05,'k')
                 # 标签默认在右边
                 text_wl = data['Wavelength'].iloc[peak_index] + coeff_right*(wl_max - wl_min)
@@ -156,6 +167,48 @@ class UVVisDataset:
         plt.title('UVVis Spectrum', fontsize=14)
         if savefig:
             plt.savefig(os.path.join(self.folder, 'uvvis_spectrum.png'))
+        plt.show()
+
+    def plot_derivative(self, index=None, wl_min=None, wl_max=None, savefig=False, abs=False):
+        """
+        绘制指定光谱数据的吸光度曲线导数。
+
+        Args:
+            index (int | list | tuple | None): 指定绘制的数据索引。
+                - None: 绘制全部光谱；
+                - int: 绘制第 index 个光谱；
+                - list 或 tuple: 绘制指定序号的多个光谱。
+            wl_min (float | None): x 轴最小波长。
+            wl_max (float | None): x 轴最大波长。
+            savefig (bool): 是否保存图像文件。
+            abs (bool): 是否绘制绝对值。
+
+        Raises:
+            TypeError: index 类型不符合要求时。
+        """
+        if index is None:
+            index = range(1,len(self.uvvis_data)+1)
+        elif isinstance(index, int):
+            index = [index]
+        else:
+            try:
+                index = list(index)
+            except TypeError:
+                raise TypeError('Index should be int, list or tuple.')
+        for id in index:
+            if abs:
+                plt.plot(self.bg_data['Wavelength'], np.abs(self.uvvis_data[id-1]['dAbsorbance']))
+            else:
+                plt.plot(self.bg_data['Wavelength'], self.uvvis_data[id-1]['dAbsorbance'])
+        if wl_min is None: wl_min = self.bg_data['Wavelength'].min()
+        if wl_max is None: wl_max = self.bg_data['Wavelength'].max()        
+
+        plt.xlim(wl_min, wl_max)
+        plt.xlabel('Wavelength (nm)', fontsize=14)
+        plt.ylabel('Absorbance Derivative', fontsize=14)
+        plt.title('UVVis Derivative Spectrum', fontsize=14)
+        if savefig:
+            plt.savefig(os.path.join(self.folder, 'uvvis_derivative_spectrum.png'))
         plt.show()
 
     def plot_background(self, wl_min=None, wl_max=None, savefig=False):
