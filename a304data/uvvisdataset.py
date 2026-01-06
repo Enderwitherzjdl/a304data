@@ -133,10 +133,34 @@ class UVVisDataset:
         for data in self.uvvis_data:
             wl = data['Wavelength'].values
             abs_ = data['Absorbance'].values
-            data['dAbsorbance'] = np.gradient(abs_, wl)
+            data['dA/dλ'] = np.gradient(abs_, wl)
+            data['dA/dω'] = - data['dA/dλ'] * (data['Wavelength']**2) / 1e7
 
     ########## Plot Data ##########
-    def plot_uvvis(self, index=None, wl_min=None, wl_max=None, savefig=False):
+    def _set_plot_style(
+        self,
+        title: str | None = None,
+        xlabel: str | None = None,
+        ylabel: str | None = None,
+        xlim: tuple | None = None,
+        ylim: tuple | None = None,
+        fontsize: int = 14,
+        legend: bool = True,
+    ):
+        if title:
+            plt.title(title, fontsize=fontsize)
+        if xlim is not None:
+            plt.xlim(xlim)
+        if ylim is not None:
+            plt.ylim(ylim)
+        if xlabel:
+            plt.xlabel(xlabel, fontsize=fontsize)
+        if ylabel:
+            plt.ylabel(ylabel, fontsize=fontsize)
+        if legend:
+            plt.legend()
+    
+    def plot_uvvis(self, index=None, xlim=None, ylim=None, savefig=False):
         """
         绘制指定光谱数据的吸光度曲线。
 
@@ -147,8 +171,8 @@ class UVVisDataset:
                 - None: 绘制全部光谱；
                 - int: 绘制第 index 个光谱；
                 - list 或 tuple: 绘制指定序号的多个光谱。
-            wl_min (float | None): x 轴最小波长。
-            wl_max (float | None): x 轴最大波长。
+            xlim (tuple(float, float) | None): x 轴范围。
+            ylim (tuple(float, float) | None): y 轴范围。
             savefig (bool): 是否保存图像文件。
 
         Raises:
@@ -164,49 +188,58 @@ class UVVisDataset:
             except TypeError:
                 raise TypeError('Index should be int, list or tuple.')
         for id in index:
-            plt.plot(self.wavelengths, self.uvvis_data[id-1]['Absorbance'])
-        if wl_min is None: wl_min = self.wavelengths.min()
-        if wl_max is None: wl_max = self.wavelengths.max()
+            plt.plot(self.wavelengths, self.uvvis_data[id-1]['Absorbance'], label=f'Data {id}')
+        if xlim is None:
+            xlim = (self.wavelengths.min(), self.wavelengths.max())
         # 标峰
         if hasattr(self, 'peaks') and self.peaks is not None and len(self.peaks) > 0:
             data = self.uvvis_data[0]  # 取出唯一的数据集
             coeff_left = 0.105; coeff_right = 0.01; coeff_len = 0.095
             for peak_index in self.peaks:
-                if data['Wavelength'].iloc[peak_index] < wl_min or data['Wavelength'].iloc[peak_index] > wl_max:
+                if data['Wavelength'].iloc[peak_index] < xlim[0] or data['Wavelength'].iloc[peak_index] > xlim[1]:
                     continue
                 plt.vlines(data['Wavelength'].iloc[peak_index], data['Absorbance'].iloc[peak_index]+0.01, 1.05,'k')
                 # 标签默认在右边
-                text_wl = data['Wavelength'].iloc[peak_index] + coeff_right*(wl_max - wl_min)
+                text_wl = data['Wavelength'].iloc[peak_index] + coeff_right*(xlim[1] - xlim[0])
                 # 右边出框了则改到左边
-                if text_wl + coeff_len*(wl_max - wl_min) > wl_max:
-                   text_wl = data['Wavelength'].iloc[peak_index] - coeff_left*(wl_max - wl_min) 
+                if text_wl + coeff_len*(xlim[1] - xlim[0]) > xlim[1]:
+                   text_wl = data['Wavelength'].iloc[peak_index] - coeff_left*(xlim[1] - xlim[0]) 
                 text_abs = 1.02
                 plt.text(text_wl, text_abs, str(data['Wavelength'].iloc[peak_index]), color='k')
-        plt.xlim(wl_min, wl_max)
-        plt.xlabel('Wavelength (nm)', fontsize=14)
-        plt.ylabel('Absorbance', fontsize=14)
-        plt.title('UVVis Spectrum', fontsize=14)
+        self._set_plot_style(
+            title='UVVis Spectrum',
+            xlabel='Wavelength (nm)',
+            ylabel='Absorbance',
+            xlim=xlim,
+            ylim=ylim,
+        )
         if savefig:
             plt.savefig(os.path.join(self.folder, 'uvvis_spectrum.png'))
         plt.show()
 
-    def plot_derivative(self, index=None, wl_min=None, wl_max=None, savefig=False, abs=False):
+    def plot_derivative(self, derivative='omega', index=None, xlim=None, ylim=None, savefig=False, abs=False):
         """
         绘制指定光谱数据的吸光度曲线导数。
 
         Args:
+            derivative (str): 导数类型，'lambda' 表示 dA/dλ，'omega' 表示 dA/dω。
             index (int | list | tuple | None): 指定绘制的数据索引。
                 - None: 绘制全部光谱；
                 - int: 绘制第 index 个光谱；
                 - list 或 tuple: 绘制指定序号的多个光谱。
-            wl_min (float | None): x 轴最小波长。
-            wl_max (float | None): x 轴最大波长。
+            xlim (tuple(float, float) | None): x 轴范围。
+            ylim (tuple(float, float) | None): y 轴范围。
             savefig (bool): 是否保存图像文件。
             abs (bool): 是否绘制绝对值。
 
         Raises:
             TypeError: index 类型不符合要求时。
         """
+        if derivative == 'lambda': dr = 'dA/dλ'
+        elif derivative == 'omega': dr = 'dA/dω'
+        else:
+            return False
+
         if index is None:
             index = range(1,len(self.uvvis_data)+1)
         elif isinstance(index, int):
@@ -218,17 +251,18 @@ class UVVisDataset:
                 raise TypeError('Index should be int, list or tuple.')
         for id in index:
             if abs:
-                plt.plot(self.wavelengths, np.abs(self.uvvis_data[id-1]['dAbsorbance']))
+                plt.plot(self.wavelengths, np.abs(self.uvvis_data[id-1][dr]), label=f'Data {id}')
             else:
-                plt.plot(self.wavelengths, self.uvvis_data[id-1]['dAbsorbance'])
-        if wl_min is None: wl_min = self.wavelengths.min()
-        if wl_max is None: wl_max = self.wavelengths.max()        
-        plt.xlim(wl_min, wl_max)
-        plt.xlabel('Wavelength (nm)', fontsize=14)
-        plt.ylabel('Absorbance Derivative', fontsize=14)
-        plt.title('UVVis Derivative Spectrum', fontsize=14)
+                plt.plot(self.wavelengths, self.uvvis_data[id-1][dr], label=f'Data {id}')
+        self._set_plot_style(
+            title=f'UVVis Derivative Spectrum ({dr})',
+            xlabel='Wavelength (nm)',
+            ylabel='Absorbance Derivative',
+            xlim=xlim,
+            ylim=ylim,
+        )
         if savefig:
-            plt.savefig(os.path.join(self.folder, 'uvvis_derivative_spectrum.png'))
+            plt.savefig(os.path.join(self.folder, f'uvvis_derivative_{derivative}_spectrum.png'))
         plt.show()
 
     def plot_background(self, wl_min=None, wl_max=None, savefig=False):
