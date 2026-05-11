@@ -32,13 +32,21 @@ class PPCorrectTool:
             check_function (lambda): 自定义chirp拟合范围函数，配置了一个默认函数。
             deg (int): chirp 多项式拟合阶数。
             plot (bool): 是否绘图显示拟合的chirp。
+            chirp_coeffs (list | np.ndarray): 直接提供chirp多项式系数，优先级高于 chirp_dir。高次项在前，常数项在后。系数顺序有误时会弹出警告并尝试翻转列表。
             ref_wl (float): 校正后对齐的波长，默认为波长的蓝边，即 450 nm。
         """
         if getattr(self.ds, "chirp_corrected", False):
             print(f'Chirp correction has been done before.')
             return
         
-        if chirp_dir is not None: # 从给定的 chirp 数据中计算
+        if chirp_coeffs is not None:
+            poly = np.poly1d(chirp_coeffs)
+            if abs(poly(self.ds.wavelengths[0]) - poly(self.ds.wavelengths[-1])) > 10:
+                print(f'Warning: reversed chirp coefficients is used.')
+                self.ds.chirp_coeffs = chirp_coeffs[::-1]
+            else:
+                self.ds.chirp_coeffs = chirp_coeffs
+        elif chirp_dir is not None: # 从给定的 chirp 数据中计算
             self.ds._load_chirp_data(chirp_dir)
             def default_check_function(wavelength, delay):
                 # 适配'~/chirp/20251025-pump-530nm-8uW-2500ps-chirp'的chirp区域检定函数
@@ -53,8 +61,6 @@ class PPCorrectTool:
                 check_function = default_check_function
             self.ds.calculate_chirp(check_function, deg, plot)
             print(f'Correcting chirp with coefficients: {self.ds.chirp_coeffs}')
-        elif chirp_coeffs is not None:
-            self.ds.chirp_coeffs = chirp_coeffs
         else:
             raise ValueError(f'Require chirp file or coefficients.')
 

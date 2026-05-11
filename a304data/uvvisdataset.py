@@ -76,7 +76,7 @@ class UVVisDataset:
         return True
 
     ########## Calculate Data ##########
-    def calculate_absorbance(self):
+    def calculate_absorbance(self, normalize=True):
         """
         计算各光谱数据的吸光度，并按最大值归一化。
 
@@ -91,9 +91,10 @@ class UVVisDataset:
         for data in self.uvvis_data:
             data['Absorbance'] = -np.log10(data['Work']) + np.log10(self.bg_data['Work'])
         # 按吸光度最大值归一化
-        max_abs = max(data['Absorbance'].max() for data in self.uvvis_data)
-        for data in self.uvvis_data:
-            data['Absorbance'] = data['Absorbance'] / max_abs
+        if normalize:
+            max_abs = max(data['Absorbance'].max() for data in self.uvvis_data)
+            for data in self.uvvis_data:
+                data['Absorbance'] = data['Absorbance'] / max_abs
          
     def find_peak(self,height=None, threshold=None, distance=None,
                prominence=None, width=None, wlen=None, rel_height=0.5,

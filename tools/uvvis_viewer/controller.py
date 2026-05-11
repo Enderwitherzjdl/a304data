@@ -2,9 +2,9 @@ from a304data.uvvisdataset import UVVisDataset
 
 
 class UVVisController:
-    def load_dataset(self, folder):
+    def load_dataset(self, folder, normalize=True):
         ds = UVVisDataset(folder)
-        ds.calculate_absorbance()
+        ds.calculate_absorbance(normalize=normalize)
         return ds
 
     def apply_find_peak(self, ds, height, prominence, distance):

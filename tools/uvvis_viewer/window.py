@@ -32,6 +32,10 @@ class MainWindow(QMainWindow):
         self.cb_peak = QCheckBox("查找峰值")
         self.cb_peak.stateChanged.connect(self.update_plot)
 
+        self.cb_normalize = QCheckBox("归一化")
+        self.cb_normalize.setChecked(True)
+        self.cb_normalize.stateChanged.connect(self.on_normalize_changed)
+
         self.spin_height = QDoubleSpinBox()
         self.spin_height.setRange(0, 10)
         self.spin_height.setDecimals(3)
@@ -65,6 +69,7 @@ class MainWindow(QMainWindow):
         ctrl.addWidget(QLabel("光谱"))
         ctrl.addWidget(self.combo_index)
         ctrl.addWidget(self.cb_peak)
+        ctrl.addWidget(self.cb_normalize)
         ctrl.addWidget(self.spin_height)
         ctrl.addWidget(self.spin_prom)
         ctrl.addWidget(self.spin_dist)
@@ -103,7 +108,7 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            self.ds = self.controller.load_dataset(folder)
+            self.ds = self.controller.load_dataset(folder, normalize=self.cb_normalize.isChecked())
 
             self.combo_index.clear()
             for i in range(len(self.ds.uvvis_data)):
@@ -185,6 +190,13 @@ class MainWindow(QMainWindow):
                 self.hline.set_visible(False)
                 self.canvas.draw_idle()
             self.statusBar().clearMessage()
+
+    def on_normalize_changed(self):
+        if self.ds is not None:
+            # 重新加载数据，应用新的归一化设置
+            folder = self.ds.folder
+            self.ds = self.controller.load_dataset(folder, normalize=self.cb_normalize.isChecked())
+            self.update_plot()
 
     def save_figure(self):
         if self.ds is None:
