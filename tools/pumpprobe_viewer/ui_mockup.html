@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pump-Probe Loop Processor UI Mockup</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --line: #d4dae2;
+      --text: #18212f;
+      --muted: #657386;
+      --blue: #1f6feb;
+      --blue-soft: #e8f1ff;
+      --green: #1c8a55;
+      --red: #cc3d3d;
+      --shadow: 0 8px 22px rgba(24, 33, 47, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #e9edf2;
+      color: var(--text);
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    .app {
+      width: 1450px;
+      height: 900px;
+      margin: 24px auto;
+      background: var(--bg);
+      display: grid;
+      grid-template-columns: 500px 1fr;
+      border: 1px solid #c8ced6;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .sidebar {
+      background: #fbfcfe;
+      border-right: 1px solid var(--line);
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-auto-rows: min-content;
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      grid-column: 1 / -1;
+      padding: 2px 2px 4px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 650;
+    }
+
+    .status {
+      color: var(--green);
+      background: #e8f7ef;
+      border: 1px solid #bfe7d0;
+      padding: 3px 8px;
+      border-radius: 14px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      min-width: 0;
+    }
+
+    .section.span-2 {
+      grid-column: 1 / -1;
+    }
+
+    .section h2 {
+      margin: 0 0 6px;
+      color: #344155;
+      font-size: 13px;
+      font-weight: 650;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .path-box {
+      min-height: 34px;
+      padding: 7px;
+      border: 1px solid #c9d2df;
+      border-radius: 6px;
+      background: #f8fafc;
+      color: #223047;
+      font-size: 12px;
+      line-height: 1.25;
+      word-break: break-all;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      margin-top: 7px;
+    }
+
+    .button-row.single {
+      grid-template-columns: 1fr;
+    }
+
+    button {
+      height: 28px;
+      border: 1px solid #bac4d1;
+      border-radius: 6px;
+      background: #fff;
+      color: #1c2b3f;
+      font: inherit;
+      cursor: default;
+    }
+
+    button.primary {
+      border-color: #0f5bd7;
+      background: var(--blue);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    button.subtle {
+      background: #f7f9fc;
+    }
+
+    .form {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 5px 7px;
+      align-items: center;
+    }
+
+    label {
+      color: #3f4b5c;
+      font-size: 13px;
+    }
+
+    input, select {
+      width: 100%;
+      height: 26px;
+      border: 1px solid #c5cedb;
+      border-radius: 5px;
+      background: #fff;
+      color: #1b2430;
+      padding: 0 8px;
+      font: inherit;
+      font-size: 13px;
+    }
+
+    .check {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #27364a;
+    }
+
+    .check input {
+      width: 16px;
+      height: 16px;
+      padding: 0;
+    }
+
+    .slice-row {
+      display: grid;
+      grid-template-columns: 76px 1fr 52px;
+      gap: 7px;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .hint {
+      margin-top: 6px;
+      padding: 6px;
+      background: var(--blue-soft);
+      color: #24405f;
+      border: 1px solid #c7ddff;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .metric {
+      padding: 6px;
+      border-radius: 6px;
+      background: #f7f9fc;
+      border: 1px solid #e0e6ef;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 2px;
+      font-size: 14px;
+    }
+
+    .main {
+      padding: 16px 18px;
+      display: grid;
+      grid-template-rows: 40px 1fr;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .toolbar-title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .toolbar-title strong {
+      font-size: 18px;
+    }
+
+    .toolbar-title span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 1.22fr 1fr;
+      grid-template-rows: 390px 390px;
+      gap: 18px 20px;
+      align-items: start;
+    }
+
+    .plot {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      min-width: 0;
+    }
+
+    .plot h3 {
+      margin: 0 0 8px;
+      text-align: center;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .plot.wide {
+      height: 390px;
+    }
+
+    .plot-inner {
+      position: relative;
+      height: 318px;
+      border-left: 2px solid #1f2937;
+      border-bottom: 2px solid #1f2937;
+      margin: 4px 22px 22px 52px;
+      background:
+        linear-gradient(90deg, rgba(31, 111, 235, 0.95) 1px, transparent 1px) 62% 0 / 1px 100% no-repeat,
+        linear-gradient(0deg, rgba(31, 111, 235, 0.65) 1px, transparent 1px) 0 34% / 100% 1px no-repeat,
+        linear-gradient(115deg, transparent 0 37%, rgba(189, 36, 53, 0.8) 37.5%, rgba(189, 36, 53, 0.75) 39%, transparent 40%),
+        linear-gradient(90deg, #d7ecfb 0%, #fff5ed 42%, #ffe5d6 72%, #f2fbff 100%);
+    }
+
+    .plot-inner.trace {
+      background:
+        linear-gradient(#eef2f7 1px, transparent 1px) 0 0 / 100% 20%,
+        linear-gradient(90deg, #eef2f7 1px, transparent 1px) 0 0 / 16.66% 100%;
+    }
+
+    .plot-inner.trace::before,
+    .plot-inner.trace::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: #8a96a6;
+    }
+
+    .plot-inner.trace::before { top: 48%; }
+    .plot-inner.trace::after { display: none; }
+
+    .line {
+      position: absolute;
+      left: 8%;
+      right: 6%;
+      height: 32%;
+      border-radius: 50%;
+      border-top: 3px solid var(--blue);
+      transform: rotate(-2deg);
+      top: 42%;
+    }
+
+    .line.orange {
+      border-top-color: #f27c22;
+      top: 39%;
+      transform: rotate(-3deg);
+    }
+
+    .line.green {
+      border-top-color: #1f9d55;
+      top: 40%;
+      transform: rotate(-4deg);
+    }
+
+    .axis-label {
+      position: absolute;
+      color: #111827;
+      font-size: 12px;
+    }
+
+    .x-label {
+      left: 42%;
+      bottom: -28px;
+    }
+
+    .y-label {
+      left: -48px;
+      top: 42%;
+      transform: rotate(-90deg);
+    }
+
+    .ticks-x, .ticks-y {
+      position: absolute;
+      color: #1f2937;
+      font-size: 11px;
+    }
+
+    .ticks-x {
+      left: 0;
+      right: 0;
+      bottom: -20px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .ticks-y {
+      top: 0;
+      bottom: 0;
+      left: -38px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      text-align: right;
+    }
+
+    .legend {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .colorbar {
+      position: absolute;
+      top: 0;
+      right: -26px;
+      width: 14px;
+      height: 100%;
+      background: linear-gradient(#b40426, #fff7f3, #2166ac);
+      border: 1px solid #1f2937;
+    }
+
+    .disabled-plot {
+      height: 390px;
+      border: 1px dashed #d5dce6;
+      border-radius: 8px;
+      background: repeating-linear-gradient(-45deg, #fafbfc, #fafbfc 12px, #f3f5f8 12px, #f3f5f8 24px);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>Pump-Probe Processor</h1>
+        <span class="status">Loaded</span>
+      </div>
+
+      <section class="section span-2">
+        <h2>Data folder</h2>
+        <div class="path-box" title="C:/Users/user/Desktop/Data/20260418-pump422nm-100uW-2500ps">
+          C:/Users/user/Desktop/Data/20260418-pump422nm-100uW-2500ps
+        </div>
+        <div class="button-row single">
+          <button>Choose folder</button>
+        </div>
+        <div class="form" style="margin-top: 7px; grid-template-columns: 62px 1fr 62px 1fr;">
+          <label>wl min</label>
+          <input value="450.00">
+          <label>wl max</label>
+          <input value="750.00">
+          <label class="check"><input type="checkbox"> Read averaged file only</label>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Dataset</h2>
+        <div class="form">
+          <label>View</label>
+          <select>
+            <option>Averaged data</option>
+            <option>Loop 1</option>
+            <option>Loop 2</option>
+            <option>Loop 3</option>
+          </select>
+          <label>Loops</label>
+          <input value="all">
+        </div>
+        <div class="button-row single">
+          <button>Calculate average</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Jump point</h2>
+        <div class="form">
+          <label>Jump wl</label>
+          <input value="650.00">
+          <label>Threshold</label>
+          <input value="0.02000">
+          <label>Delay range</label>
+          <input value="-20 to 2500">
+        </div>
+        <div class="button-row single">
+          <button>Clean jumps</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Chirp</h2>
+        <div class="form">
+          <label>Coeffs</label>
+          <input value="0">
+        </div>
+        <div class="button-row single">
+          <button>Correct chirp</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Background</h2>
+        <div class="form">
+          <label>Before ps</label>
+          <input value="0.00">
+        </div>
+        <div class="button-row single">
+          <button>Subtract background</button>
+        </div>
+      </section>
+
+      <section class="section span-2">
+        <h2>View</h2>
+        <div class="slice-row">
+          <label>Delay cuts</label>
+          <input id="delayCuts" value="-20, 1240, 2500">
+          <button class="subtle" onclick="document.getElementById('delayCuts').value=''">Clear</button>
+        </div>
+        <div class="slice-row">
+          <label>Probe cuts</label>
+          <input id="probeCuts" value="450.387, 600.193, 749.998">
+          <button class="subtle" onclick="document.getElementById('probeCuts').value=''">Clear</button>
+        </div>
+        <div class="form">
+          <label class="check"><input type="checkbox" checked> Signed-log delay axis</label>
+        </div>
+        <div class="hint">Ctrl+click adds a probe slice. Shift+click adds a delay slice.</div>
+      </section>
+
+      <section class="section">
+        <h2>Save</h2>
+        <div class="form">
+          <label>Filename</label>
+          <input value="processed_averaged.dat">
+        </div>
+        <div class="button-row single">
+          <button>Save current average</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Info</h2>
+        <div class="info-grid">
+          <div class="metric"><span>Loops</span><strong>44</strong></div>
+          <div class="metric"><span>Average</span><strong>Yes</strong></div>
+          <div class="metric"><span>Probe</span><strong>450-750</strong></div>
+          <div class="metric"><span>Delay</span><strong>-20-2500</strong></div>
+        </div>
+      </section>
+    </aside>
+
+    <main class="main">
+      <div class="toolbar">
+        <div class="toolbar-title">
+          <strong>Averaged data</strong>
+          <span>Probe wavelength increases left to right. Delay uses signed-log display.</span>
+        </div>
+      </div>
+
+      <section class="chart-grid">
+        <div class="plot wide">
+          <h3>2D map</h3>
+          <div class="plot-inner">
+            <div class="colorbar"></div>
+            <div class="ticks-y"><span>2000</span><span>200</span><span>20</span><span>2</span><span>0</span><span>-20</span></div>
+            <div class="ticks-x"><span>450</span><span>525</span><span>600</span><span>675</span><span>750</span></div>
+            <span class="axis-label y-label">Delay (ps)</span>
+            <span class="axis-label x-label">Probe wavelength</span>
+          </div>
+        </div>
+
+        <div class="plot wide">
+          <h3>Slices at probe</h3>
+          <div class="plot-inner trace">
+            <div class="line"></div>
+            <div class="line orange"></div>
+            <div class="line green"></div>
+            <div class="legend">450.387<br>600.193<br>749.998</div>
+            <div class="ticks-y"><span>0.03</span><span>0.02</span><span>0.01</span><span>0</span><span>-0.01</span></div>
+            <div class="ticks-x"><span>-20</span><span>-2</span><span>0</span><span>2</span><span>20</span><span>200</span><span>2000</span></div>
+            <span class="axis-label y-label">Intensity</span>
+            <span class="axis-label x-label">Delay (ps)</span>
+          </div>
+        </div>
+
+        <div class="plot wide">
+          <h3>Slices at delay</h3>
+          <div class="plot-inner trace">
+            <div class="line"></div>
+            <div class="line orange"></div>
+            <div class="line green"></div>
+            <div class="legend">-20 ps<br>1240 ps<br>2500 ps</div>
+            <div class="ticks-y"><span>0.004</span><span>0.002</span><span>0</span><span>-0.006</span><span>-0.012</span></div>
+            <div class="ticks-x"><span>450</span><span>525</span><span>600</span><span>675</span><span>750</span></div>
+            <span class="axis-label y-label">Intensity</span>
+            <span class="axis-label x-label">Probe wavelength</span>
+          </div>
+        </div>
+
+        <div class="disabled-plot"></div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
