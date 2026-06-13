@@ -1,0 +1,9 @@
+PumpProbeViewer
+Version: 1.0.0
+Package type: one-dir
+Frozen: yes
+Entry point: PumpProbeViewer/PumpProbeViewer.exe
+Icon: kazuha-nagareboshi.ico
+Settings namespace: A304Data/PumpProbeViewerRelease
+
+This release directory is a fixed 1.0.0 package. Do not modify it for later upgrades.

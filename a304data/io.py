@@ -32,6 +32,41 @@ def load_pp_loop(filename, wl_min=450, wl_max=750):
     else:            # 判定为近红外
         return data.loc[:, wl_min_clipped:wl_max_clipped]
 
+def load_2dvis_data(filename, wl_min=None, wl_max=None):
+    """
+    Load one 2D-VIS matrix file.
+
+    The file format matches the LabVIEW exported 2D-VIS data used in
+    ``Raw_Data`` and ``Auto_FFT`` folders: the first row stores probe
+    wavelengths, and the first column stores either the raw scan axis or the
+    FFT frequency axis.
+
+    Args:
+        filename (str): Data file path.
+        wl_min (float | None): Lower wavelength bound. Keep all columns when
+            omitted.
+        wl_max (float | None): Upper wavelength bound. Keep all columns when
+            omitted.
+
+    Returns:
+        pd.DataFrame: Matrix indexed by the first column, with wavelength
+            columns converted to numeric values.
+    """
+    data = pd.read_table(filename)
+    data.columns = pd.to_numeric(data.columns, errors='coerce')
+    data.set_index(0, inplace=True)
+    data.index = pd.to_numeric(data.index, errors='coerce')
+
+    if wl_min is None and wl_max is None:
+        return data
+
+    col_min = data.columns.min() if wl_min is None else wl_min
+    col_max = data.columns.max() if wl_max is None else wl_max
+    lower = max(min(col_min, col_max), data.columns.min())
+    upper = min(max(col_min, col_max), data.columns.max())
+    columns = data.columns[(data.columns >= lower) & (data.columns <= upper)]
+    return data.loc[:, columns]
+
 def load_uvvis_data(filename):
     """
     从文件中读取 UV-Vis 数据。

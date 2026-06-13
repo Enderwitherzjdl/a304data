@@ -22,7 +22,6 @@ class PPCorrectTool:
         deg = 3, 
         plot = False, 
         chirp_coeffs = None,
-        ref_wl = None,
     ):
         """
         校正数据中的 chirp。
@@ -33,7 +32,6 @@ class PPCorrectTool:
             deg (int): chirp 多项式拟合阶数。
             plot (bool): 是否绘图显示拟合的chirp。
             chirp_coeffs (list | np.ndarray): 直接提供chirp多项式系数，优先级高于 chirp_dir。高次项在前，常数项在后。系数顺序有误时会弹出警告并尝试翻转列表。
-            ref_wl (float): 校正后对齐的波长，默认为波长的蓝边，即 450 nm。
         """
         if getattr(self.ds, "chirp_corrected", False):
             print(f'Chirp correction has been done before.')
@@ -67,11 +65,9 @@ class PPCorrectTool:
         interpolated_data = pd.DataFrame(index=self.ds.default_delays, columns=self.ds.wavelengths)
         interpolated_data.index.name = '0' # 保持与原始数据格式一致
         poly = np.poly1d(self.ds.chirp_coeffs)
-        if ref_wl is None:
-            ref_wl = self.ds.wavelengths[-1]
         for wl in self.ds.wavelengths: # 插值应使用原数据，即 self.ds.default_delays
             interp_func = interp1d(self.ds.default_delays, self.ds.avg_data[wl], kind='linear', bounds_error=False, fill_value=np.nan)
-            interpolated_data[wl] = interp_func(self.ds.default_delays + poly(wl) - poly(ref_wl))
+            interpolated_data[wl] = interp_func(self.ds.default_delays + poly(wl))
         self.ds.avg_data = interpolated_data
         self.ds.chirp_corrected = True
         print(f'Chirp corrected for averaged data.')
