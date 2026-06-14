@@ -2,8 +2,8 @@
 
 Desktop UI for the common pump-probe loop workflow:
 
-1. Choose a data folder.
-2. Loop files or an existing averaged file load automatically.
+1. Choose a data folder or a single data file.
+2. Loop files, an existing averaged file, or the chosen single file load automatically.
 3. Clean jump points from all loops.
 4. Average selected loops.
 5. Apply chirp correction from polynomial coefficients.
@@ -37,5 +37,6 @@ tools\pumpprobe_viewer\Pump-Probe Loop Processor.lnk
   and negative delays are compressed separately.
 - In the 2D map, Ctrl+click adds a probe slice and Shift+click adds a delay
   slice.
-- `Save current average` writes the filename shown in the save box, defaulting to
-  `processed_averaged.dat`.
+- `Choose Data` opens one `.dat` or `.txt` matrix directly and treats it as the
+  current averaged dataset.
+- `Save current average` opens a save dialog and appends `.dat` when needed.
