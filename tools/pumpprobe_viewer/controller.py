@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from a304data.correct import PPCorrectTool
+from a304data.io import load_pp_loop
 from a304data.pploopdataset import PPLoopDataset
 from a304data.utils import get_closest_value
 
@@ -39,6 +41,18 @@ class PumpProbeController:
             wl_max=wl_max,
             read_averaged_only=read_averaged_only,
         )
+        self.dataset = ds
+        self.view_source = "avg"
+        return self.get_summary()
+
+    def load_single_file(
+        self,
+        path: str,
+        wl_min: float,
+        wl_max: float,
+    ) -> LoadSummary:
+        data = load_pp_loop(path, wl_min, wl_max)
+        ds = SingleFilePumpProbeDataset(path, data)
         self.dataset = ds
         self.view_source = "avg"
         return self.get_summary()
@@ -185,3 +199,19 @@ class PumpProbeController:
             if token:
                 coeffs.append(float(token))
         return coeffs
+
+
+class SingleFilePumpProbeDataset:
+    def __init__(self, path: str, data: pd.DataFrame) -> None:
+        self.file_path = path
+        self.folder = os.path.dirname(path) or os.getcwd()
+        self.avg_data = data
+        self.data = [data]
+        self.loop_num = 1
+        self.averaged_loop_num = 1
+        self.averaged_loops = [1]
+        self.chirp_corrected = False
+        self.wavelengths = data.columns.to_numpy(dtype=float)
+        self.delays = data.index.to_numpy(dtype=float)
+        self.default_delays = self.delays.copy()
+        self.correct = PPCorrectTool(self)

@@ -206,6 +206,7 @@ class ChirpFitDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
+    APP_VERSION = "1.0.1"
     SLICE_COLORS = ("red", "#00d900", "blue", "#00d5d5", "magenta", "#ff8c00", "#7f3fbf")
     CARPET_CMAP = LinearSegmentedColormap.from_list(
         "carpetview_like",
@@ -224,7 +225,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
 
-        self.setWindowTitle("Pump-Probe Loop Processor")
+        self.setWindowTitle(f"Pump-Probe Loop Processor {self.APP_VERSION}")
         self.resize(1450, 900)
         self.setMinimumSize(1280, 780)
 
@@ -251,6 +252,7 @@ class MainWindow(QMainWindow):
             self.folder_label.setText(self.current_folder)
 
         self.btn_open = QPushButton("Choose folder")
+        self.btn_choose_data = QPushButton("Choose Data")
         self.btn_clean = QPushButton("Clean jumps")
         self.btn_average = QPushButton("Calculate average")
         self.btn_chirp = QPushButton("Correct chirp")
@@ -353,7 +355,11 @@ class MainWindow(QMainWindow):
 
         load_box, load_layout = self._make_section("DATA FOLDER")
         load_layout.addWidget(self.folder_label)
-        load_layout.addWidget(self.btn_open)
+        source_buttons = QHBoxLayout()
+        source_buttons.setSpacing(8)
+        source_buttons.addWidget(self.btn_choose_data)
+        source_buttons.addWidget(self.btn_open)
+        load_layout.addLayout(source_buttons)
         wl_row = QGridLayout()
         wl_row.setHorizontalSpacing(8)
         wl_row.setVerticalSpacing(6)
@@ -517,6 +523,7 @@ class MainWindow(QMainWindow):
 
     def _connect_signals(self) -> None:
         self.btn_open.clicked.connect(self.choose_folder)
+        self.btn_choose_data.clicked.connect(self.choose_data_file)
         self.btn_clean.clicked.connect(self.clean_jump_points)
         self.btn_average.clicked.connect(self.calculate_average)
         self.btn_chirp.clicked.connect(self.apply_chirp)
@@ -723,6 +730,28 @@ class MainWindow(QMainWindow):
             self.coeffs_edit.clear()
             self.load_data()
 
+    def choose_data_file(self) -> None:
+        last_file = self.settings.value("last_data_file", "", type=str) or ""
+        if last_file and os.path.isfile(last_file):
+            start_dir = os.path.dirname(last_file)
+        elif self.current_folder and os.path.isdir(self.current_folder):
+            start_dir = self.current_folder
+        else:
+            start_dir = os.getcwd()
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose pump-probe data file",
+            start_dir,
+            "Data files (*.dat *.txt);;All files (*)",
+        )
+        if path:
+            self.current_folder = os.path.dirname(path)
+            self.settings.setValue("last_data_file", path)
+            self.settings.setValue("last_data_folder", self.current_folder)
+            self.folder_label.setText(path)
+            self.coeffs_edit.clear()
+            self.load_single_data(path)
+
     def load_data(self) -> None:
         if not self.current_folder:
             self.choose_folder()
@@ -739,6 +768,21 @@ class MainWindow(QMainWindow):
             self.update_plot()
             self.status_pill.setText("Loaded")
             self.statusBar().showMessage("Data loaded")
+        except Exception as exc:
+            self.show_error(exc)
+
+    def load_single_data(self, path: str) -> None:
+        try:
+            summary = self.controller.load_single_file(
+                path,
+                self.spin_wl_min.value(),
+                self.spin_wl_max.value(),
+            )
+            self._apply_summary(summary)
+            self.refresh_data_sources()
+            self.update_plot()
+            self.status_pill.setText("Loaded")
+            self.statusBar().showMessage("Data file loaded")
         except Exception as exc:
             self.show_error(exc)
 
@@ -1003,7 +1047,7 @@ class MainWindow(QMainWindow):
         self.metric_probe.setText(f"{wl_low:.0f}-{wl_high:.0f}")
         self.metric_delay.setText(f"{delay_low:g}~{delay_high:g}")
         self.info_label.setText(
-            f"Folder loaded. Current view uses "
+            f"Data loaded. Current view uses "
             f"{'the averaged file' if summary.has_average else 'calculated/loop data'}."
         )
 
