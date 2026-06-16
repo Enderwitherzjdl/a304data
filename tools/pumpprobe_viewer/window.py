@@ -206,7 +206,8 @@ class ChirpFitDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
-    APP_VERSION = "1.0.1"
+    APP_VERSION = "1.0.2"
+    SETTINGS_NAME = "PumpProbeViewerRelease"
     SLICE_COLORS = ("red", "#00d900", "blue", "#00d5d5", "magenta", "#ff8c00", "#7f3fbf")
     CARPET_CMAP = LinearSegmentedColormap.from_list(
         "carpetview_like",
@@ -226,15 +227,22 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle(f"Pump-Probe Loop Processor {self.APP_VERSION}")
-        self.resize(1450, 900)
-        self.setMinimumSize(1280, 780)
+        self.resize(1550, 900)
+        self.setMinimumSize(1360, 780)
 
-        self.settings = QSettings("A304Data", "PumpProbeViewerRelease")
+        self.settings = QSettings("A304Data", self.SETTINGS_NAME)
         self.controller = PumpProbeController()
         self.current_folder = self.settings.value("last_data_folder", "", type=str) or None
         self.colorbar = None
         self.section_layouts: list[QVBoxLayout] = []
         self.compact_sidebar = False
+        self.selected_jump: tuple[float, float] | None = None
+        self.operation_log: list[str] = ["Ready."]
+        self.ax_img = None
+        self.ax_wl = None
+        self.ax_delay = None
+        self.ax_status = None
+        self.jump_clear_mode = False
 
         self._build_controls()
         self._build_plot_area()
@@ -261,9 +269,14 @@ class MainWindow(QMainWindow):
         self.btn_save = QPushButton("Save current average")
         self.btn_clear_delay = QPushButton("Clear")
         self.btn_clear_probe = QPushButton("Clear")
+        self.btn_clear_selected_jump = QPushButton("Clear jump point")
+        self.btn_cancel_jump_clear = QPushButton("Cancel")
+        self.btn_clear_selected_jump.setFixedWidth(150)
+        self.btn_cancel_jump_clear.setFixedWidth(90)
+        self.btn_cancel_jump_clear.setEnabled(False)
         for button in (self.btn_average, self.btn_chirp, self.btn_background, self.btn_save):
             button.setProperty("role", "primary")
-        for button in (self.btn_clear_delay, self.btn_clear_probe):
+        for button in (self.btn_clear_delay, self.btn_clear_probe, self.btn_cancel_jump_clear):
             button.setProperty("role", "subtle")
 
         self.cb_avg_only = QCheckBox("Read averaged file only")
@@ -313,6 +326,11 @@ class MainWindow(QMainWindow):
         self.wavelength_slices_edit = QLineEdit("500, 550, 600")
         self.cb_symlog = QCheckBox("Signed-log delay axis")
         self.cb_symlog.setChecked(True)
+        self.selected_jump_label = QLabel("Jump cleanup:\nnot active\nselected: none")
+        self.selected_jump_label.setObjectName("HintLabel")
+        self.selected_jump_label.setWordWrap(True)
+        self.selected_jump_label.setMinimumHeight(58)
+        self.selected_jump_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.info_label = QLabel("Load a folder to see data information.")
         self.info_label.setObjectName("InfoLabel")
@@ -324,7 +342,7 @@ class MainWindow(QMainWindow):
         self.metric_delay = self._metric_value("--")
 
     def _build_plot_area(self) -> None:
-        self.figure = Figure(figsize=(10.6, 8.2), constrained_layout=False)
+        self.figure = Figure(figsize=(11.6, 8.2), constrained_layout=False)
         self.figure.patch.set_facecolor("#f4f6f8")
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setObjectName("PlotCanvas")
@@ -382,15 +400,13 @@ class MainWindow(QMainWindow):
         dataset_layout.addWidget(self.btn_average)
 
         clean_box, clean_layout = self._make_section("JUMP POINT")
-        clean_form = QFormLayout()
-        clean_form.setHorizontalSpacing(8)
-        clean_form.setVerticalSpacing(7)
-        clean_form.addRow("Jump wl", self.spin_ref_wl)
-        clean_form.addRow("Threshold", self.spin_threshold)
-        clean_form.addRow("Delay min", self.spin_clean_delay_min)
-        clean_form.addRow("Delay max", self.spin_clean_delay_max)
-        clean_layout.addLayout(clean_form)
-        clean_layout.addWidget(self.btn_clean)
+        clean_layout.addWidget(self.selected_jump_label)
+        jump_button_row = QHBoxLayout()
+        jump_button_row.setSpacing(8)
+        jump_button_row.addWidget(self.btn_clear_selected_jump)
+        jump_button_row.addWidget(self.btn_cancel_jump_clear)
+        jump_button_row.addStretch(1)
+        clean_layout.addLayout(jump_button_row)
 
         chirp_box, chirp_layout = self._make_section("CHIRP")
         chirp_form = QFormLayout()
@@ -480,7 +496,7 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
         left_scroll = QScrollArea()
         left_scroll.setObjectName("SidebarScroll")
-        left_scroll.setFixedWidth(500)
+        left_scroll.setFixedWidth(460)
         left_scroll.setWidgetResizable(True)
         left_scroll.setFrameShape(QFrame.Shape.NoFrame)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -532,6 +548,8 @@ class MainWindow(QMainWindow):
         self.btn_save.clicked.connect(self.save_processed)
         self.btn_clear_delay.clicked.connect(self.clear_delay_slices)
         self.btn_clear_probe.clicked.connect(self.clear_probe_slices)
+        self.btn_clear_selected_jump.clicked.connect(self.handle_clear_jump_button)
+        self.btn_cancel_jump_clear.clicked.connect(self.cancel_jump_clear_mode)
         self.combo_data_source.currentIndexChanged.connect(self.on_data_source_changed)
 
         for widget in (
@@ -764,6 +782,10 @@ class MainWindow(QMainWindow):
                 self.cb_avg_only.isChecked(),
             )
             self._apply_summary(summary)
+            self.selected_jump = None
+            self.jump_clear_mode = False
+            self._update_selected_jump_label()
+            self.operation_log = ["Data loaded."]
             self.refresh_data_sources()
             self.update_plot()
             self.status_pill.setText("Loaded")
@@ -779,6 +801,10 @@ class MainWindow(QMainWindow):
                 self.spin_wl_max.value(),
             )
             self._apply_summary(summary)
+            self.selected_jump = None
+            self.jump_clear_mode = False
+            self._update_selected_jump_label()
+            self.operation_log = ["Data file loaded."]
             self.refresh_data_sources()
             self.update_plot()
             self.status_pill.setText("Loaded")
@@ -788,13 +814,18 @@ class MainWindow(QMainWindow):
 
     def clean_jump_points(self) -> None:
         try:
-            self.controller.clean_jump_points(
+            count = self.controller.clean_jump_points(
                 ref_wavelength=self.spin_ref_wl.value(),
                 threshold=self.spin_threshold.value(),
                 delay_min=self.spin_clean_delay_min.value(),
                 delay_max=self.spin_clean_delay_max.value(),
             )
-            self.statusBar().showMessage("Jump points cleaned")
+            self.update_plot()
+            loop_number = self.controller.get_current_loop_number()
+            target = f"Loop {loop_number}" if loop_number else "all loops"
+            message = f"Auto-cleaned {count} jump points in {target}"
+            self.add_operation_log(message)
+            self.statusBar().showMessage(message)
         except Exception as exc:
             self.show_error(exc)
 
@@ -803,7 +834,9 @@ class MainWindow(QMainWindow):
             self.controller.calculate_average(self.loops_edit.text())
             self.refresh_data_sources(preferred="avg")
             self.update_plot()
-            self.statusBar().showMessage("Average calculated")
+            message = f"Average calculated from {self.loops_edit.text().strip() or 'all'}"
+            self.add_operation_log(message)
+            self.statusBar().showMessage(message)
         except Exception as exc:
             self.show_error(exc)
 
@@ -811,7 +844,9 @@ class MainWindow(QMainWindow):
         try:
             self.controller.apply_chirp(self.coeffs_edit.text())
             self.update_plot()
-            self.statusBar().showMessage("Chirp corrected")
+            message = "Chirp corrected"
+            self.add_operation_log(message)
+            self.statusBar().showMessage(message)
         except Exception as exc:
             self.show_error(exc)
 
@@ -828,7 +863,9 @@ class MainWindow(QMainWindow):
             self.coeffs_edit.setText(ChirpFitDialog.format_coeffs(dialog.coeffs))
             self.controller.apply_chirp(self.coeffs_edit.text())
             self.update_plot()
-            self.statusBar().showMessage("Fit chirp by eye applied")
+            message = "Fit chirp by eye applied"
+            self.add_operation_log(message)
+            self.statusBar().showMessage(message)
         except Exception as exc:
             self.show_error(exc)
 
@@ -837,7 +874,9 @@ class MainWindow(QMainWindow):
             self.controller.subtract_background(self.spin_bg_before.value())
             self.refresh_data_sources(preferred="avg")
             self.update_plot()
-            self.statusBar().showMessage("Background subtracted")
+            message = f"Background subtracted before {self.spin_bg_before.value():g} ps"
+            self.add_operation_log(message)
+            self.statusBar().showMessage(message)
         except Exception as exc:
             self.show_error(exc)
 
@@ -860,6 +899,7 @@ class MainWindow(QMainWindow):
                 path = f"{path}.dat"
             self.settings.setValue("last_save_folder", os.path.dirname(path))
             path = self.controller.save_current_average(path)
+            self.add_operation_log(f"Saved {os.path.basename(path)}")
             self.statusBar().showMessage(f"Saved {path}")
             QMessageBox.information(self, "Saved", path)
         except Exception as exc:
@@ -872,6 +912,34 @@ class MainWindow(QMainWindow):
     def clear_probe_slices(self) -> None:
         self.wavelength_slices_edit.clear()
         self.update_plot()
+
+    def handle_clear_jump_button(self) -> None:
+        if not self.jump_clear_mode:
+            if self.controller.get_current_loop_number() is None:
+                self.statusBar().showMessage("Switch to a single Loop view before clearing jumps")
+                return
+            self.jump_clear_mode = True
+            self.selected_jump = None
+            self._update_selected_jump_label()
+            self.statusBar().showMessage("Click a jump point, then press Confirm clear")
+            self.update_plot()
+            return
+
+        if self.selected_jump is None:
+            self.statusBar().showMessage("Click a jump point first")
+            return
+        try:
+            wavelength, delay = self.selected_jump
+            wl, cleaned_delay, loop_number = self.controller.clear_selected_jump(wavelength, delay)
+            self.selected_jump = None
+            self.jump_clear_mode = False
+            self._update_selected_jump_label()
+            self.update_plot()
+            message = f"Cleared Loop {loop_number} jump at {wl:g} nm, {cleaned_delay:g} ps"
+            self.add_operation_log(message)
+            self.statusBar().showMessage(message)
+        except Exception as exc:
+            self.show_error(exc)
 
     def update_plot(self) -> None:
         try:
@@ -891,14 +959,17 @@ class MainWindow(QMainWindow):
 
         self.figure.clear()
         self.plot_title.setText(self.controller.get_view_source_label())
-        self.figure.subplots_adjust(left=0.08, right=0.985, top=0.94, bottom=0.08, wspace=0.52, hspace=0.42)
+        self.figure.subplots_adjust(left=0.10, right=0.985, top=0.94, bottom=0.08, wspace=0.38, hspace=0.42)
         grid = self.figure.add_gridspec(2, 2, width_ratios=[1.05, 1], height_ratios=[1, 1])
         ax_img = self.figure.add_subplot(grid[0, 0])
         ax_wl = self.figure.add_subplot(grid[0, 1])
         ax_delay = self.figure.add_subplot(grid[1, 0])
-        ax_empty = self.figure.add_subplot(grid[1, 1])
-        ax_empty.axis("off")
-        for ax in (ax_img, ax_wl, ax_delay):
+        ax_status = self.figure.add_subplot(grid[1, 1])
+        self.ax_img = ax_img
+        self.ax_wl = ax_wl
+        self.ax_delay = ax_delay
+        self.ax_status = ax_status
+        for ax in (ax_img, ax_wl, ax_delay, ax_status):
             ax.set_facecolor("#ffffff")
             ax.set_axisbelow(True)
             for spine in ax.spines.values():
@@ -970,13 +1041,15 @@ class MainWindow(QMainWindow):
         if wl_slices:
             ax_wl.legend(fontsize=8)
 
+        self._draw_selected_jump(ax_img, ax_wl, ax_delay, use_signed_log)
+        self._draw_operation_log(ax_status)
         self.canvas.draw_idle()
 
     def on_plot_click(self, event) -> None:
         if event.inaxes is None or event.xdata is None or event.ydata is None:
             return
         try:
-            if event.inaxes.get_title() == self.controller.get_view_source_label():
+            if event.inaxes is self.ax_img:
                 wl = self.controller.get_nearest_wavelength(event.xdata)
                 delay_value = self._delay_from_plot_value(event.ydata)
                 delay = self.controller.get_nearest_delay(delay_value)
@@ -992,16 +1065,51 @@ class MainWindow(QMainWindow):
                     self.delay_slices_edit.setText(self._append_unique(self.delay_slices_edit.text(), delay))
                     self.statusBar().showMessage(f"Added delay slice {delay:g} ps")
                     self.update_plot()
-                else:
-                    self.statusBar().showMessage("Ctrl+click adds probe; Shift+click adds delay")
+                elif self.jump_clear_mode:
+                    self.select_jump(wl, delay)
+            elif event.inaxes is self.ax_wl:
+                if not self.jump_clear_mode:
+                    return
+                delay_value = self._delay_from_plot_value(event.xdata)
+                delay = self.controller.get_nearest_delay(delay_value)
+                wl = self._nearest_probe_slice_for_click(delay, event.ydata)
+                self.select_jump(wl, delay)
+            elif event.inaxes is self.ax_delay:
+                if not self.jump_clear_mode:
+                    return
+                wl = self.controller.get_nearest_wavelength(event.xdata)
+                delay = self._nearest_delay_slice_for_click(wl, event.ydata)
+                self.select_jump(wl, delay)
         except Exception as exc:
             self.show_error(exc)
+
+    def cancel_jump_clear_mode(self) -> None:
+        self.jump_clear_mode = False
+        self.selected_jump = None
+        self._update_selected_jump_label()
+        self.statusBar().showMessage("Jump cleanup canceled")
+        self.update_plot()
+
+    def select_jump(self, wavelength: float, delay: float) -> None:
+        loop_number = self.controller.get_current_loop_number()
+        if loop_number is None:
+            self.statusBar().showMessage("Switch to a single Loop view before selecting jumps")
+            return
+        wl = self.controller.get_nearest_wavelength(wavelength)
+        nearest_delay = self.controller.get_nearest_delay(delay)
+        self.selected_jump = (wl, nearest_delay)
+        self._update_selected_jump_label()
+        self.statusBar().showMessage(f"Selected Loop {loop_number}: {wl:g} nm, {nearest_delay:g} ps")
+        self.update_plot()
 
     def on_data_source_changed(self) -> None:
         source = self.combo_data_source.currentData()
         if not source:
             return
         self.controller.set_view_source(source)
+        self.jump_clear_mode = False
+        self.selected_jump = None
+        self._update_selected_jump_label()
         self.update_plot()
 
     def refresh_data_sources(self, preferred: str | None = None) -> None:
@@ -1087,6 +1195,91 @@ class MainWindow(QMainWindow):
         if not any(abs(value - existing) <= max(1e-9, abs(value) * 1e-9) for existing in values):
             values.append(value)
         return ", ".join(f"{item:g}" for item in values)
+
+    def _nearest_probe_slice_for_click(self, delay: float, intensity: float) -> float:
+        data = self.controller.get_matrix()
+        nearest_delay = self.controller.get_nearest_delay(delay)
+        candidates = self._parse_number_list(self.wavelength_slices_edit.text())
+        if not candidates:
+            return self.controller.get_nearest_wavelength(self.spin_ref_wl.value())
+        best_wl = None
+        best_distance = float("inf")
+        for candidate in candidates:
+            wl = self.controller.get_nearest_wavelength(candidate)
+            distance = abs(float(data.loc[nearest_delay, wl]) - intensity)
+            if distance < best_distance:
+                best_wl = wl
+                best_distance = distance
+        return float(best_wl)
+
+    def _nearest_delay_slice_for_click(self, wavelength: float, intensity: float) -> float:
+        data = self.controller.get_matrix()
+        nearest_wl = self.controller.get_nearest_wavelength(wavelength)
+        candidates = self._parse_number_list(self.delay_slices_edit.text())
+        if not candidates:
+            return self.controller.get_nearest_delay(0.0)
+        best_delay = None
+        best_distance = float("inf")
+        for candidate in candidates:
+            delay = self.controller.get_nearest_delay(candidate)
+            distance = abs(float(data.loc[delay, nearest_wl]) - intensity)
+            if distance < best_distance:
+                best_delay = delay
+                best_distance = distance
+        return float(best_delay)
+
+    def _update_selected_jump_label(self) -> None:
+        self._update_jump_buttons()
+        if self.selected_jump is None:
+            if self.jump_clear_mode:
+                self.selected_jump_label.setText("Jump cleanup:\nclick a point\nselected: none")
+            else:
+                self.selected_jump_label.setText("Jump cleanup:\nnot active\nselected: none")
+            return
+        loop_number = self.controller.get_current_loop_number()
+        wl, delay = self.selected_jump
+        prefix = f"Loop {loop_number}" if loop_number else "not in loop view"
+        self.selected_jump_label.setText(f"Jump cleanup:\n{prefix}\n{wl:g} nm, {delay:g} ps")
+
+    def _update_jump_buttons(self) -> None:
+        self.btn_clear_selected_jump.setText("Confirm clear" if self.jump_clear_mode else "Clear jump point")
+        self.btn_clear_selected_jump.setProperty("role", "primary" if self.jump_clear_mode else "")
+        self.btn_cancel_jump_clear.setEnabled(self.jump_clear_mode)
+        for button in (self.btn_clear_selected_jump, self.btn_cancel_jump_clear):
+            button.style().unpolish(button)
+            button.style().polish(button)
+            button.update()
+
+    def add_operation_log(self, message: str) -> None:
+        self.operation_log.append(message)
+        self.operation_log = self.operation_log[-9:]
+        self.update_plot()
+
+    def _draw_selected_jump(self, ax_img, ax_wl, ax_delay, use_signed_log: bool) -> None:
+        if self.selected_jump is None or self.controller.get_current_loop_number() is None:
+            return
+        wl, delay = self.selected_jump
+        delay_plot = self._signed_log_scalar(delay) if use_signed_log else delay
+        marker_color = "#ffd43b"
+        edge_color = "#172033"
+        ax_img.scatter([wl], [delay_plot], s=82, marker="o", facecolors="none", edgecolors=edge_color, linewidths=1.7, zorder=9)
+        ax_img.scatter([wl], [delay_plot], s=36, marker="x", color=marker_color, linewidths=1.9, zorder=10)
+        ax_wl.axvline(delay_plot, color=marker_color, linewidth=1.4, alpha=0.95, linestyle="--")
+        ax_delay.axvline(wl, color=marker_color, linewidth=1.4, alpha=0.95, linestyle="--")
+
+    def _draw_operation_log(self, ax) -> None:
+        ax.set_title("Status")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        lines = self.operation_log[-8:]
+        y = 0.88
+        for index, message in enumerate(reversed(lines)):
+            color = "#172033" if index == 0 else "#536176"
+            weight = "semibold" if index == 0 else "normal"
+            ax.text(0.06, y, message, transform=ax.transAxes, ha="left", va="top", fontsize=9, color=color, fontweight=weight, wrap=True)
+            y -= 0.105
 
     @staticmethod
     def _default_values(low: float, high: float) -> str:

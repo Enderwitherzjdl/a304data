@@ -120,6 +120,7 @@ class PPCorrectTool:
                     count += 1
             self.ds.data[id] = data_clean
         print(f'Cleaned {count} jump points in total.')
+        return count
 
     def delay_zero(self, new_delay_zero:float):
         """

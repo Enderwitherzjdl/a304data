@@ -1,0 +1,10 @@
+PumpProbeViewer
+Version: 1.0.2
+Package type: one-dir
+Frozen: yes
+Entry point: PumpProbeViewer/PumpProbeViewer.exe
+Icon: kazuha-nagareboshi.ico
+Settings namespace: A304Data/PumpProbeViewerRelease
+
+This release adds the interactive single-loop jump cleanup workflow and preserves
+the fixed 1.0.0 and 1.0.1 release directories.

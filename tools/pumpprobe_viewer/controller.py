@@ -75,17 +75,44 @@ class PumpProbeController:
         threshold: float,
         delay_min: float | None = None,
         delay_max: float | None = None,
-    ) -> None:
+    ) -> int:
         ds = self._require_dataset()
         delay_range = None
         if delay_min is not None and delay_max is not None and delay_min < delay_max:
             delay_range = (delay_min, delay_max)
-        ds.correct.jump_points(
+        loop = self.get_current_loop_number() or "all"
+        return ds.correct.jump_points(
             ref_wl=ref_wavelength,
             threshold=threshold,
-            loop="all",
+            loop=loop,
             delay_range=delay_range,
         )
+
+    def get_current_loop_number(self) -> int | None:
+        if not self.view_source.startswith("loop:"):
+            return None
+        return int(self.view_source.split(":", 1)[1])
+
+    def clear_selected_jump(self, wavelength: float, delay: float) -> tuple[float, float, int]:
+        ds = self._require_dataset()
+        loop_number = self.get_current_loop_number()
+        if loop_number is None:
+            raise ValueError("Switch to a single loop before clearing a selected jump.")
+        if not 1 <= loop_number <= getattr(ds, "loop_num", 0):
+            raise ValueError("Selected loop is out of range.")
+
+        data = ds.data[loop_number - 1].copy()
+        nearest_delay = float(get_closest_value(delay, data.index.values))
+        nearest_wavelength = float(get_closest_value(wavelength, data.columns.values))
+        row_pos = data.index.get_loc(nearest_delay)
+        if isinstance(row_pos, slice) or isinstance(row_pos, np.ndarray):
+            raise ValueError("Cannot clear a jump when delay values are duplicated.")
+        if row_pos <= 0 or row_pos >= len(data.index) - 1:
+            raise ValueError("Cannot clear the first or last delay point.")
+
+        data.iloc[row_pos] = (data.iloc[row_pos - 1] + data.iloc[row_pos + 1]) / 2
+        ds.data[loop_number - 1] = data
+        return nearest_wavelength, nearest_delay, loop_number
 
     def calculate_average(self, loops_text: str = "all") -> None:
         ds = self._require_dataset()
