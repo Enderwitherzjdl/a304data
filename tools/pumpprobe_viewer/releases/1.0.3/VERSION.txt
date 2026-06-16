@@ -1,0 +1,9 @@
+PumpProbeViewer
+Version: 1.0.3
+Package type: one-dir
+Frozen: yes
+Entry point: PumpProbeViewer/PumpProbeViewer.exe
+Icon: kazuha-nagareboshi.ico
+Settings namespace: A304Data/PumpProbeViewerRelease
+
+This release adds FIGURE display-range controls for delay and wavelength axes.

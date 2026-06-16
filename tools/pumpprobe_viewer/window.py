@@ -206,7 +206,7 @@ class ChirpFitDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
-    APP_VERSION = "1.0.2"
+    APP_VERSION = "1.0.3"
     SETTINGS_NAME = "PumpProbeViewerRelease"
     SLICE_COLORS = ("red", "#00d900", "blue", "#00d5d5", "magenta", "#ff8c00", "#7f3fbf")
     CARPET_CMAP = LinearSegmentedColormap.from_list(
@@ -269,6 +269,8 @@ class MainWindow(QMainWindow):
         self.btn_save = QPushButton("Save current average")
         self.btn_clear_delay = QPushButton("Clear")
         self.btn_clear_probe = QPushButton("Clear")
+        self.btn_clear_delay_range = QPushButton("Clear")
+        self.btn_clear_wavelength_range = QPushButton("Clear")
         self.btn_clear_selected_jump = QPushButton("Clear jump point")
         self.btn_cancel_jump_clear = QPushButton("Cancel")
         self.btn_clear_selected_jump.setFixedWidth(150)
@@ -276,7 +278,13 @@ class MainWindow(QMainWindow):
         self.btn_cancel_jump_clear.setEnabled(False)
         for button in (self.btn_average, self.btn_chirp, self.btn_background, self.btn_save):
             button.setProperty("role", "primary")
-        for button in (self.btn_clear_delay, self.btn_clear_probe, self.btn_cancel_jump_clear):
+        for button in (
+            self.btn_clear_delay,
+            self.btn_clear_probe,
+            self.btn_clear_delay_range,
+            self.btn_clear_wavelength_range,
+            self.btn_cancel_jump_clear,
+        ):
             button.setProperty("role", "subtle")
 
         self.cb_avg_only = QCheckBox("Read averaged file only")
@@ -324,6 +332,17 @@ class MainWindow(QMainWindow):
 
         self.delay_slices_edit = QLineEdit("0, 1, 10")
         self.wavelength_slices_edit = QLineEdit("500, 550, 600")
+        self.delay_range_min_edit = QLineEdit()
+        self.delay_range_max_edit = QLineEdit()
+        self.wavelength_range_min_edit = QLineEdit()
+        self.wavelength_range_max_edit = QLineEdit()
+        for edit in (
+            self.delay_range_min_edit,
+            self.delay_range_max_edit,
+            self.wavelength_range_min_edit,
+            self.wavelength_range_max_edit,
+        ):
+            edit.setPlaceholderText("auto")
         self.cb_symlog = QCheckBox("Signed-log delay axis")
         self.cb_symlog.setChecked(True)
         self.selected_jump_label = QLabel("Jump cleanup:\nnot active\nselected: none")
@@ -428,6 +447,28 @@ class MainWindow(QMainWindow):
         save_box, save_layout = self._make_section("SAVE")
         save_layout.addWidget(self.btn_save)
 
+        figure_box, figure_layout = self._make_section("FIGURE")
+        delay_range_row = QGridLayout()
+        delay_range_row.setHorizontalSpacing(8)
+        delay_range_row.addWidget(QLabel("delay range"), 0, 0)
+        delay_range_row.addWidget(self.delay_range_min_edit, 0, 1)
+        delay_range_row.addWidget(QLabel("~"), 0, 2)
+        delay_range_row.addWidget(self.delay_range_max_edit, 0, 3)
+        delay_range_row.addWidget(self.btn_clear_delay_range, 0, 4)
+        delay_range_row.setColumnStretch(1, 1)
+        delay_range_row.setColumnStretch(3, 1)
+        wavelength_range_row = QGridLayout()
+        wavelength_range_row.setHorizontalSpacing(8)
+        wavelength_range_row.addWidget(QLabel("wavelength"), 0, 0)
+        wavelength_range_row.addWidget(self.wavelength_range_min_edit, 0, 1)
+        wavelength_range_row.addWidget(QLabel("~"), 0, 2)
+        wavelength_range_row.addWidget(self.wavelength_range_max_edit, 0, 3)
+        wavelength_range_row.addWidget(self.btn_clear_wavelength_range, 0, 4)
+        wavelength_range_row.setColumnStretch(1, 1)
+        wavelength_range_row.setColumnStretch(3, 1)
+        figure_layout.addLayout(delay_range_row)
+        figure_layout.addLayout(wavelength_range_row)
+
         view_box, view_layout = self._make_section("VIEW")
         delay_row = QGridLayout()
         delay_row.setHorizontalSpacing(8)
@@ -465,10 +506,11 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(clean_box, 2, 1)
         left_layout.addWidget(chirp_box, 3, 0)
         left_layout.addWidget(background_box, 3, 1)
-        left_layout.addWidget(view_box, 4, 0, 1, 2)
-        left_layout.addWidget(save_box, 5, 0)
-        left_layout.addWidget(info_box, 5, 1)
-        left_layout.setRowStretch(6, 1)
+        left_layout.addWidget(figure_box, 4, 0, 1, 2)
+        left_layout.addWidget(view_box, 5, 0, 1, 2)
+        left_layout.addWidget(save_box, 6, 0)
+        left_layout.addWidget(info_box, 6, 1)
+        left_layout.setRowStretch(7, 1)
 
         right = QWidget()
         right.setObjectName("PlotPanel")
@@ -548,6 +590,8 @@ class MainWindow(QMainWindow):
         self.btn_save.clicked.connect(self.save_processed)
         self.btn_clear_delay.clicked.connect(self.clear_delay_slices)
         self.btn_clear_probe.clicked.connect(self.clear_probe_slices)
+        self.btn_clear_delay_range.clicked.connect(self.clear_delay_range)
+        self.btn_clear_wavelength_range.clicked.connect(self.clear_wavelength_range)
         self.btn_clear_selected_jump.clicked.connect(self.handle_clear_jump_button)
         self.btn_cancel_jump_clear.clicked.connect(self.cancel_jump_clear_mode)
         self.combo_data_source.currentIndexChanged.connect(self.on_data_source_changed)
@@ -555,6 +599,10 @@ class MainWindow(QMainWindow):
         for widget in (
             self.delay_slices_edit,
             self.wavelength_slices_edit,
+            self.delay_range_min_edit,
+            self.delay_range_max_edit,
+            self.wavelength_range_min_edit,
+            self.wavelength_range_max_edit,
             self.cb_symlog,
         ):
             if isinstance(widget, QLineEdit):
@@ -913,6 +961,16 @@ class MainWindow(QMainWindow):
         self.wavelength_slices_edit.clear()
         self.update_plot()
 
+    def clear_delay_range(self) -> None:
+        self.delay_range_min_edit.clear()
+        self.delay_range_max_edit.clear()
+        self.update_plot()
+
+    def clear_wavelength_range(self) -> None:
+        self.wavelength_range_min_edit.clear()
+        self.wavelength_range_max_edit.clear()
+        self.update_plot()
+
     def handle_clear_jump_button(self) -> None:
         if not self.jump_clear_mode:
             if self.controller.get_current_loop_number() is None:
@@ -956,6 +1014,22 @@ class MainWindow(QMainWindow):
         x_label, y_label = self.controller.get_axis_labels()
         use_signed_log = self.cb_symlog.isChecked()
         delay_plot = self._signed_log(delays) if use_signed_log else delays
+        try:
+            wavelength_range = self._parse_optional_range(
+                self.wavelength_range_min_edit.text(),
+                self.wavelength_range_max_edit.text(),
+                float(np.nanmin(wavelengths)),
+                float(np.nanmax(wavelengths)),
+            )
+            delay_range = self._parse_optional_range(
+                self.delay_range_min_edit.text(),
+                self.delay_range_max_edit.text(),
+                float(np.nanmin(delays)),
+                float(np.nanmax(delays)),
+            )
+        except ValueError as exc:
+            self.statusBar().showMessage(str(exc))
+            return
 
         self.figure.clear()
         self.plot_title.setText(self.controller.get_view_source_label())
@@ -1041,6 +1115,7 @@ class MainWindow(QMainWindow):
         if wl_slices:
             ax_wl.legend(fontsize=8)
 
+        self._apply_figure_ranges(ax_img, ax_wl, ax_delay, wavelength_range, delay_range, use_signed_log)
         self._draw_selected_jump(ax_img, ax_wl, ax_delay, use_signed_log)
         self._draw_operation_log(ax_status)
         self.canvas.draw_idle()
@@ -1195,6 +1270,36 @@ class MainWindow(QMainWindow):
         if not any(abs(value - existing) <= max(1e-9, abs(value) * 1e-9) for existing in values):
             values.append(value)
         return ", ".join(f"{item:g}" for item in values)
+
+    @staticmethod
+    def _parse_optional_range(low_text: str, high_text: str, default_low: float, default_high: float) -> tuple[float, float]:
+        low = float(low_text.strip()) if low_text.strip() else default_low
+        high = float(high_text.strip()) if high_text.strip() else default_high
+        if not (np.isfinite(low) and np.isfinite(high)):
+            raise ValueError("Figure ranges must be finite numbers.")
+        if abs(low - high) < 1e-12:
+            raise ValueError("Figure range min and max cannot be the same.")
+        return (min(low, high), max(low, high))
+
+    def _apply_figure_ranges(
+        self,
+        ax_img,
+        ax_wl,
+        ax_delay,
+        wavelength_range: tuple[float, float],
+        delay_range: tuple[float, float],
+        use_signed_log: bool,
+    ) -> None:
+        wl_low, wl_high = wavelength_range
+        delay_low, delay_high = delay_range
+        delay_axis_low = self._signed_log_scalar(delay_low) if use_signed_log else delay_low
+        delay_axis_high = self._signed_log_scalar(delay_high) if use_signed_log else delay_high
+        delay_axis_range = (min(delay_axis_low, delay_axis_high), max(delay_axis_low, delay_axis_high))
+
+        ax_img.set_xlim(wl_low, wl_high)
+        ax_img.set_ylim(*delay_axis_range)
+        ax_wl.set_xlim(*delay_axis_range)
+        ax_delay.set_xlim(wl_low, wl_high)
 
     def _nearest_probe_slice_for_click(self, delay: float, intensity: float) -> float:
         data = self.controller.get_matrix()

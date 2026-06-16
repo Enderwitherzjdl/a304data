@@ -39,6 +39,8 @@ tools\pumpprobe_viewer\Pump-Probe Loop Processor.lnk
   slice.
 - In a single loop view, use `Clear jump point`, click a jump point, then press
   `Confirm clear` to replace that delay row with the average of its neighbors.
+- The `FIGURE` controls limit the displayed delay and wavelength ranges without
+  changing the loaded data.
 - `Choose Data` opens one `.dat` or `.txt` matrix directly and treats it as the
   current averaged dataset.
 - `Save current average` opens a save dialog and appends `.dat` when needed.

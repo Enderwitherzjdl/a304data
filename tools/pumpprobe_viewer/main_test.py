@@ -15,7 +15,7 @@ except ImportError:
 
 
 def main() -> None:
-    MainWindow.APP_VERSION = "1.0.2-test"
+    MainWindow.APP_VERSION = "1.0.3-test"
     MainWindow.SETTINGS_NAME = "PumpProbeViewerTest"
     app = QApplication(sys.argv)
     win = MainWindow()
