@@ -3,8 +3,10 @@ from __future__ import annotations
 import os
 
 import numpy as np
-from PyQt6.QtCore import QSettings, Qt
+from PyQt6.QtCore import QEvent, QSettings, Qt
+from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
+    QAbstractSpinBox,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -13,6 +15,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QFrame,
+    QGraphicsDropShadowEffect,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -23,6 +26,7 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSpinBox,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -205,6 +209,168 @@ class ChirpFitDialog(QDialog):
         return ", ".join(f"{value:.8g}" for value in coeffs)
 
 
+class ShortcutKey(QFrame):
+    def __init__(
+        self,
+        key: str,
+        title: str = "",
+        detail: str = "",
+        accent: str = "blue",
+        placeholder: bool = False,
+        size: tuple[int, int] = (162, 162),
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.title = title
+        self.detail = detail
+        self.placeholder = placeholder
+        self.setObjectName("ShortcutKeyPlaceholder" if placeholder else "ShortcutKey")
+        self.setProperty("accent", accent)
+        self.setFixedSize(*size)
+        self.setCursor(Qt.CursorShape.ArrowCursor if placeholder else Qt.CursorShape.PointingHandCursor)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        label = QLabel(key)
+        label.setObjectName("ShortcutKeyText")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(label)
+
+    def enterEvent(self, event) -> None:
+        if not self.placeholder:
+            QToolTip.showText(
+                self.mapToGlobal(self.rect().bottomLeft()),
+                f"{self.title}\n{self.detail}",
+                self,
+                self.rect(),
+            )
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        if not self.placeholder:
+            QToolTip.hideText()
+        super().leaveEvent(event)
+
+
+class ShortcutHelpDialog(QDialog):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("快捷键说明")
+        self.setModal(True)
+        self.setFixedSize(299, 267)
+
+        title = QLabel("SHORTCUTS")
+        title.setObjectName("ShortcutDialogTitle")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setGeometry(0, 12, 299, 14)
+
+        panel = QWidget(self)
+        panel.setObjectName("ShortcutPanel")
+        panel.setGeometry(0, 0, 299, 267)
+
+        shadow = QGraphicsDropShadowEffect(panel)
+        shadow.setBlurRadius(15)
+        shadow.setColor(Qt.GlobalColor.lightGray)
+        shadow.setOffset(0, 7)
+        panel.setGraphicsEffect(shadow)
+
+        title.setParent(panel)
+
+        left_rule = QFrame(panel)
+        left_rule.setObjectName("ShortcutDivider")
+        left_rule.setGeometry(21, 32, 124, 1)
+        right_rule = QFrame(panel)
+        right_rule.setObjectName("ShortcutDivider")
+        right_rule.setGeometry(154, 32, 124, 1)
+
+        dot = QFrame(panel)
+        dot.setObjectName("ShortcutDot")
+        dot.setGeometry(148, 30, 3, 3)
+
+        keys = [
+            ("Q", 45, 55, 47, 50, "", "", "blue", True),
+            ("W", 101, 53, 54, 54, "上一项数据", "切换到数据来源列表中的上一项。", "blue", False),
+            ("E", 164, 55, 47, 50, "", "", "blue", True),
+            ("A", 59, 114, 54, 54, "Average 数据", "直接切换到 average 数据。", "blue", False),
+            ("S", 124, 114, 54, 54, "下一项数据", "切换到数据来源列表中的下一项。", "blue", False),
+            ("D", 189, 114, 54, 54, "去跳点 / 确认去跳点", "进入去跳点模式，或确认当前选中的跳点。", "blue", False),
+            ("Z", 79, 179, 47, 50, "", "", "blue", True),
+            ("X", 141, 179, 47, 50, "", "", "blue", True),
+            ("C", 201, 177, 54, 54, "取消去跳点", "退出当前去跳点模式。", "orange", False),
+        ]
+        for key, x, y, width, height, item_title, detail, accent, placeholder in keys:
+            shortcut_key = ShortcutKey(
+                key,
+                item_title,
+                detail,
+                accent,
+                placeholder,
+                (width, height),
+                panel,
+            )
+            shortcut_key.move(x, y)
+
+        self.setStyleSheet(
+            """
+            QDialog {
+                background: #ffffff;
+                border: 0;
+                color: #18212f;
+                font-family: "Segoe UI", "Microsoft YaHei UI", Arial;
+            }
+            QWidget#ShortcutPanel {
+                background: #ffffff;
+                border: 2px solid #d9dde1;
+                border-radius: 12px;
+            }
+            QLabel#ShortcutDialogTitle {
+                color: #6a7482;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 3px;
+            }
+            QFrame#ShortcutDivider {
+                background: #dde2e8;
+            }
+            QFrame#ShortcutDot {
+                background: #40aef2;
+                border-radius: 2px;
+            }
+            QFrame#ShortcutKey, QFrame#ShortcutKeyPlaceholder {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #f4f6f8);
+                border: 1px solid #d8dde4;
+                border-radius: 7px;
+            }
+            QFrame#ShortcutKey[accent="blue"] {
+                border: 2px solid #31a9f1;
+            }
+            QFrame#ShortcutKey[accent="orange"] {
+                border: 2px solid #ff9f25;
+            }
+            QFrame#ShortcutKey:hover {
+                background: #ffffff;
+            }
+            QFrame#ShortcutKeyPlaceholder {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #fafbfc);
+                border: 1px solid #e0e4ea;
+                border-radius: 7px;
+            }
+            QFrame#ShortcutKey QLabel#ShortcutKeyText {
+                color: #1d232d;
+                font-size: 24px;
+                font-weight: 800;
+            }
+            QFrame#ShortcutKeyPlaceholder QLabel#ShortcutKeyText {
+                color: #c8ccd2;
+                font-size: 23px;
+                font-weight: 800;
+            }
+            """
+        )
+
+
 class MainWindow(QMainWindow):
     APP_VERSION = "1.0.3"
     SETTINGS_NAME = "PumpProbeViewerRelease"
@@ -247,7 +413,9 @@ class MainWindow(QMainWindow):
         self._build_controls()
         self._build_plot_area()
         self._build_layout()
+        self._build_menu()
         self._connect_signals()
+        QApplication.instance().installEventFilter(self)
         self._apply_style()
 
         self.statusBar().showMessage("Ready")
@@ -579,6 +747,12 @@ class MainWindow(QMainWindow):
         value.setObjectName("MetricValue")
         return value
 
+    def _build_menu(self) -> None:
+        help_menu = self.menuBar().addMenu("帮助")
+        shortcuts_action = QAction("快捷键说明", self)
+        shortcuts_action.triggered.connect(self.show_shortcuts_help)
+        help_menu.addAction(shortcuts_action)
+
     def _connect_signals(self) -> None:
         self.btn_open.clicked.connect(self.choose_folder)
         self.btn_choose_data.clicked.connect(self.choose_data_file)
@@ -611,6 +785,70 @@ class MainWindow(QMainWindow):
                 widget.valueChanged.connect(self.update_plot)
             else:
                 widget.stateChanged.connect(self.update_plot)
+
+    def _shortcut_allowed(self) -> bool:
+        focus = QApplication.focusWidget()
+        if isinstance(focus, (QLineEdit, QAbstractSpinBox, QComboBox)):
+            return False
+        return True
+
+    def eventFilter(self, obj, event) -> bool:
+        if event.type() != QEvent.Type.KeyPress or not self.isActiveWindow():
+            return super().eventFilter(obj, event)
+        if event.modifiers() != Qt.KeyboardModifier.NoModifier or not self._shortcut_allowed():
+            return super().eventFilter(obj, event)
+
+        handlers = {
+            Qt.Key.Key_A: self.shortcut_show_average,
+            Qt.Key.Key_S: lambda: self.shortcut_step_data_source(1),
+            Qt.Key.Key_W: lambda: self.shortcut_step_data_source(-1),
+            Qt.Key.Key_D: self.shortcut_clear_or_confirm_jump,
+            Qt.Key.Key_C: self.shortcut_cancel_jump_clear,
+        }
+        handler = handlers.get(event.key())
+        if handler is None:
+            return super().eventFilter(obj, event)
+        handler()
+        return True
+
+    def shortcut_show_average(self) -> None:
+        if not self._shortcut_allowed():
+            return
+        self.set_data_source_by_key("avg")
+
+    def shortcut_step_data_source(self, step: int) -> None:
+        if not self._shortcut_allowed():
+            return
+        count = self.combo_data_source.count()
+        if count <= 0:
+            return
+        current = self.combo_data_source.currentIndex()
+        if current < 0:
+            current = 0
+        self.combo_data_source.setCurrentIndex((current + step) % count)
+
+    def shortcut_clear_or_confirm_jump(self) -> None:
+        if not self._shortcut_allowed():
+            return
+        if self.btn_clear_selected_jump.isEnabled():
+            self.btn_clear_selected_jump.click()
+
+    def shortcut_cancel_jump_clear(self) -> None:
+        if not self._shortcut_allowed():
+            return
+        if self.jump_clear_mode:
+            self.btn_cancel_jump_clear.click()
+
+    def set_data_source_by_key(self, source_key: str) -> None:
+        for index in range(self.combo_data_source.count()):
+            if self.combo_data_source.itemData(index) == source_key:
+                self.combo_data_source.setCurrentIndex(index)
+                return
+        self.statusBar().showMessage("Average data is not available")
+
+    def show_shortcuts_help(self) -> None:
+        dialog = ShortcutHelpDialog(self)
+        dialog.exec()
 
     def _apply_style(self) -> None:
         self.setStyleSheet(
